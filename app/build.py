@@ -42,9 +42,9 @@ def main() -> int:
         "--collect-data", "certifi",
     ]
     system = platform.system()
-    if system != "Darwin":
-        args.append("--onefile")  # a single file to send on Windows and Linux
-    else:
+    # A folder rather than a single exe: the gateway runs yt-dlp as a copy of
+    # the app, and a one-file build would unpack 100 MB on every call.
+    if system == "Darwin":
         args += ["--osx-bundle-identifier", "fr.numtube.app"]
     subprocess.run(args, check=True)
 
@@ -57,8 +57,7 @@ def main() -> int:
         subprocess.run(["ditto", os.path.join("dist", "NumTube.app"),
                         os.path.join(stage, "NumTube.app")], check=True)
     else:
-        binary = "NumTube.exe" if system == "Windows" else "NumTube"
-        shutil.copy2(os.path.join("dist", binary), os.path.join(stage, binary))
+        shutil.copytree(os.path.join("dist", "NumTube"), os.path.join(stage, "NumTube"))
         if system == "Linux":
             shutil.copy2("installer-regle-usb.sh", stage)
     shutil.copy2("LISEZMOI.txt", stage)

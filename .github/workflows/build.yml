@@ -1,0 +1,87 @@
+# Builds YOUR NumTube app (Windows and Mac), firmware included.
+#
+# It only runs in a PRIVATE copy of this repository ("Use this template" ->
+# Private). The firmware is compiled from NumWorks' own sources for you, in
+# your account; it must not end up downloadable by everyone, which is what a
+# public repository would do with it.
+#
+# Actions tab -> "Build NumTube" -> Run workflow. About 15 minutes, then
+# download NumTube-windows or NumTube-mac at the bottom of the run's page.
+name: Build NumTube
+
+on:
+  workflow_dispatch:
+
+jobs:
+  private-only:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check that this copy is private
+        if: ${{ !github.event.repository.private }}
+        run: |
+          echo "::error::Ce dépôt est public. Crée une copie PRIVÉE (bouton « Use this template » > Private) et lance la compilation dedans."
+          exit 1
+
+  firmware:
+    needs: private-only
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the NumWorks SDK (Linux)
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y build-essential git imagemagick libfreetype6-dev \
+            libjpeg-dev libpng-dev pkg-config python3-venv \
+            gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi \
+            libstdc++-arm-none-eabi-newlib
+          arm-none-eabi-gcc --version | head -1
+      - name: Download Epsilon, apply the patch, compile
+        run: ./scripts/build-firmware.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          retention-days: 1
+          path: |
+            app/firmware/*.dfu
+            app/numworks_dfu.py
+
+  app:
+    needs: firmware
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: NumTube-windows
+          - os: macos-14
+            name: NumTube-mac
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: firmware
+          path: app
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Python packages
+        run: python -m pip install pyinstaller pillow numpy pyusb libusb-package imageio-ffmpeg yt-dlp certifi
+      - name: Build the app
+        run: python app/build.py
+      - name: Self-test (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath app\dist\NumTube\NumTube.exe -ArgumentList '--self-test' `
+            -Wait -PassThru -NoNewWindow -RedirectStandardOutput selftest.txt -RedirectStandardError selftest-err.txt
+          Get-Content selftest.txt, selftest-err.txt
+          exit $p.ExitCode
+      - name: Self-test (Mac)
+        if: runner.os == 'macOS'
+        run: app/dist/NumTube.app/Contents/MacOS/NumTube --self-test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          retention-days: 7
+          path: app/dist/*.zip

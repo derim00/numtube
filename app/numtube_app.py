@@ -21,6 +21,27 @@ if len(sys.argv) > 1 and sys.argv[1] == "--yt-dlp":
 
     sys.exit(yt_dlp.main(sys.argv[2:]))
 
+if len(sys.argv) > 1 and sys.argv[1] == "--self-test":
+    # Used by the build workflow: checks that every bundled part loads.
+    import subprocess
+
+    import imageio_ffmpeg
+    import libusb_package
+    import usb.core
+    import yt_dlp
+
+    here = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+    print("ffmpeg:", subprocess.run([ffmpeg, "-version"], capture_output=True,
+                                    text=True).stdout.splitlines()[0])
+    print("yt-dlp:", yt_dlp.version.__version__)
+    backend = libusb_package.get_libusb1_backend()
+    print("libusb:", "ok" if backend else "MISSING")
+    list(usb.core.find(find_all=True, backend=backend))
+    firmware = sorted(os.listdir(os.path.join(here, "firmware")))
+    print("firmware:", firmware)
+    sys.exit(0 if backend and firmware else 1)
+
 HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "gateway"))  # when run from source

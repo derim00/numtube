@@ -17,3 +17,4 @@ tests/*.mp4
 tests/sim/
 .DS_Store
 .fresh-build.log
+*.log
