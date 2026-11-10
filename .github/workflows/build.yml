@@ -53,7 +53,7 @@ jobs:
         include:
           - os: windows-latest
             name: NumTube-windows
-          - os: macos-14
+          - os: macos-latest
             name: NumTube-mac
     runs-on: ${{ matrix.os }}
     steps:

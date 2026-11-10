@@ -33,13 +33,31 @@ partage pas, partage ce dépôt.
 
 ## Ce qu'il faut
 
-- Un Mac (Apple Silicon testé ; Linux devrait marcher, pas testé)
+- Un Mac (testé) ou un PC Windows (compilé par GitHub, pas testé avec une calculatrice)
 - Une NumWorks **N0120** ou **N0115** avec la version officielle **26.4.0**
   (testé ; d'autres versions peuvent afficher « OFFICIAL UPGRADE REQUIRED »)
 - Un câble USB qui transfère les données
 - `git`, `make`, `python3` et le kit de compilation ARM de NumWorks
 
-## Installation
+## Installation sans rien compiler (Windows ou Mac)
+
+GitHub peut tout compiler pour toi, dans **ta propre copie privée** :
+
+1. En haut de cette page : **Use this template** > **Create a new repository**,
+   coche **Private** (obligatoire : la compilation refuse de tourner dans un
+   dépôt public, pour que le firmware ne soit pas téléchargeable par tous).
+2. Dans ta copie : onglet **Actions** > **Build NumTube** > **Run workflow**.
+3. Environ 15 minutes plus tard, en bas de la page de la compilation, télécharge
+   **NumTube-windows** ou **NumTube-mac**, décompresse.
+4. Windows : lance `NumTube\NumTube.exe` (SmartScreen : « Informations
+   complémentaires » > « Exécuter quand même »). Mac : clic droit sur
+   `NumTube.app` > Ouvrir.
+
+La version Windows n'a été vérifiée qu'en démarrage automatique sur les
+machines de GitHub, pas avec une vraie calculatrice. La calculatrice déclare
+le pilote WinUSB, donc aucun pilote ne devrait être à installer.
+
+## Installation en compilant sur ton Mac
 
 ```bash
 git clone <ce dépôt> numtube && cd numtube
