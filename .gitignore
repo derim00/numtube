@@ -1,0 +1,19 @@
+# NumWorks code and anything built from it stays local, never committed.
+firmware/
+app/firmware/
+app/numworks_dfu.py
+app/build/
+app/dist/
+*.spec
+.build-*.log
+
+# Local tools and test outputs
+.venv/
+__pycache__/
+tests/decode_harness
+tests/decode_harness.dSYM/
+tests/*.png
+tests/*.mp4
+tests/sim/
+.DS_Store
+.fresh-build.log

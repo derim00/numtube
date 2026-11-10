@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NumTube</title>
+<style>
+  :root {
+    --bg: #f6f6f4; --card: #ffffff; --text: #1b1b1b; --muted: #6b6b6b;
+    --line: #e4e4e0; --accent: #e5322d; --accent-text: #ffffff; --ok: #1f8a4c;
+    --warn: #b26a00; --log-bg: #f0f0ec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141414; --card: #1e1e1e; --text: #f1f1f1; --muted: #a0a0a0;
+      --line: #2e2e2e; --accent: #ff4b45; --accent-text: #ffffff; --ok: #4cc27f;
+      --warn: #f0a640; --log-bg: #181818;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.5 -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
+  }
+  main { max-width: 640px; margin: 0 auto; padding: 32px 16px 48px; }
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+  .logo {
+    width: 40px; height: 32px; border-radius: 9px; background: var(--accent);
+    display: grid; place-items: center;
+  }
+  .logo::after {
+    content: ""; border-left: 13px solid #fff; border-top: 8px solid transparent;
+    border-bottom: 8px solid transparent; margin-left: 4px;
+  }
+  h1 { font-size: 24px; margin: 0; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 20px; margin-bottom: 16px;
+  }
+  .status { display: flex; gap: 12px; align-items: flex-start; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 7px; flex: none; background: var(--muted); }
+  .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.go { background: var(--accent); }
+  .status h2 { font-size: 18px; margin: 0 0 4px; }
+  .status p { margin: 0; color: var(--muted); }
+  ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
+  label { display: block; font-weight: 600; margin: 16px 0 6px; }
+  .hint { color: var(--muted); font-size: 14px; margin-top: 4px; }
+  input {
+    width: 140px; font: inherit; padding: 8px 10px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--text);
+  }
+  button {
+    font: inherit; font-weight: 600; border: 0; border-radius: 10px;
+    padding: 12px 20px; background: var(--accent); color: var(--accent-text);
+    cursor: pointer; margin-top: 16px;
+  }
+  button:disabled { opacity: .45; cursor: default; }
+  button.quiet { background: transparent; color: var(--muted); border: 1px solid var(--line); padding: 8px 14px; margin: 0; }
+  .bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; margin-top: 16px; }
+  .bar div { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+  .result { margin-top: 12px; font-weight: 600; }
+  .result.ok { color: var(--ok); } .result.err { color: var(--warn); }
+  details summary { cursor: pointer; color: var(--muted); }
+  pre {
+    background: var(--log-bg); border-radius: 8px; padding: 12px; font-size: 12px;
+    max-height: 260px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+  }
+  footer { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 14px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header><div class="logo"></div><h1>NumTube</h1></header>
+
+  <section class="card">
+    <div class="status">
+      <div class="dot" id="dot"></div>
+      <div>
+        <h2 id="title">Recherche de la calculatrice…</h2>
+        <p id="text"></p>
+        <ol id="steps" hidden></ol>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" id="install" hidden>
+    <h2 style="margin:0;font-size:18px">Installer NumTube</h2>
+    <p class="hint" style="margin:4px 0 0">Le firmware officiel n'est pas effacé : NumTube va dans l'autre emplacement.
+      Un reset au dos de la calculatrice ramène le firmware officiel.</p>
+    <label for="version">Version officielle de la calculatrice</label>
+    <input id="version" placeholder="26.4.0" autocomplete="off">
+    <div class="hint" id="versionHint">Sur la calculatrice : Paramètres → À propos → Version.</div>
+    <button id="go">Installer sur la calculatrice</button>
+    <div class="bar" id="bar" hidden><div id="fill"></div></div>
+    <div class="result" id="result"></div>
+  </section>
+
+  <section class="card">
+    <details>
+      <summary>Journal</summary>
+      <pre id="log"></pre>
+    </details>
+  </section>
+
+  <footer>
+    <span>Laisse cette appli ouverte pendant que tu regardes des vidéos.</span>
+    <button class="quiet" id="quit">Quitter</button>
+  </footer>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+let versionTouched = false;
+$("version").addEventListener("input", () => { versionTouched = true; });
+
+function setStatus(kind, title, text, steps) {
+  $("dot").className = "dot " + kind;
+  $("title").textContent = title;
+  $("text").textContent = text || "";
+  const list = $("steps");
+  list.replaceChildren(...(steps || []).map((s) => { const li = document.createElement("li"); li.textContent = s; return li; }));
+  list.hidden = !(steps && steps.length);
+}
+
+async function refresh() {
+  let s;
+  try { s = await (await fetch("/api/state", { cache: "no-store" })).json(); }
+  catch { setStatus("warn", "L'appli NumTube est fermée", "Relance-la pour continuer."); return; }
+
+  const linux = s.platform.startsWith("linux");
+  if (s.installing) {
+    setStatus("go", "Installation en cours…", "Ne débranche pas la calculatrice.");
+  } else if (s.calculator === "dfu") {
+    const d = s.detail;
+    setStatus("go", "Calculatrice prête pour l'installation",
+      `Modèle ${d.model.toUpperCase()}. Clique sur « Installer ».`);
+  } else if (s.calculator === "numtube") {
+    setStatus("ok", "NumTube est connecté",
+      "Fais une recherche sur la calculatrice : les vidéos passent par cet ordinateur.");
+  } else if (s.calculator === "error") {
+    setStatus("warn", "La calculatrice est branchée mais inaccessible",
+      linux ? "Sous Linux, autorise l'accès USB une fois :" : (s.detail.error || ""),
+      linux ? ["Ouvre un terminal dans le dossier de NumTube", "Lance : sudo ./installer-regle-usb.sh", "Débranche et rebranche la calculatrice"] : []);
+  } else {
+    setStatus("", "Branche ta calculatrice", "", [
+      "Relie-la à cet ordinateur avec un câble USB qui transfère les données.",
+      "Pour installer : elle doit afficher « Calculatrice connectée ». Sinon, appuie sur reset au dos puis rebranche.",
+      "Si NumTube est déjà installé : ouvre l'appli NumTube et fais une recherche.",
+    ]);
+  }
+
+  $("install").hidden = !(s.calculator === "dfu" || s.installing || s.installResult);
+  if (s.detectedVersion && !versionTouched) {
+    $("version").value = s.detectedVersion;
+    $("versionHint").textContent = "Lue automatiquement sur la calculatrice.";
+  }
+  $("go").disabled = s.installing || s.calculator !== "dfu";
+  $("bar").hidden = !s.installing && s.progress === 0;
+  $("fill").style.width = s.progress + "%";
+  const r = $("result");
+  r.textContent = s.installResult === "ok" ? "C'est installé ! Ouvre l'appli NumTube sur la calculatrice." : s.installResult;
+  r.className = "result " + (s.installResult === "ok" ? "ok" : s.installResult ? "err" : "");
+
+  const log = $("log");
+  const atBottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 8;
+  log.textContent = s.logs.join("\n");
+  if (atBottom) log.scrollTop = log.scrollHeight;
+}
+
+$("go").addEventListener("click", async () => {
+  const version = $("version").value.trim();
+  if (!/^\d{1,2}\.\d{1,2}\.\d{1,2}$/.test(version)) {
+    $("result").textContent = "Indique la version officielle, par exemple 26.4.0.";
+    $("result").className = "result err";
+    $("version").focus();
+    return;
+  }
+  $("go").disabled = true;
+  await fetch("/api/install", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version }) });
+  refresh();
+});
+$("quit").addEventListener("click", async () => {
+  try { await fetch("/api/quit", { method: "POST" }); } catch {}
+  setStatus("warn", "NumTube est fermé", "Tu peux fermer cet onglet.");
+  clearInterval(timer);
+});
+const timer = setInterval(refresh, 1000);
+refresh();
+</script>
+</body>
+</html>

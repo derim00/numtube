@@ -1,0 +1,20 @@
+NumTube is licensed under the Creative Commons Attribution-NonCommercial-
+ShareAlike 4.0 International License (CC BY-NC-SA 4.0).
+
+You may copy, redistribute, remix, transform and build upon this material for
+non-commercial purposes, provided that you give appropriate credit, indicate if
+changes were made, and distribute your contributions under the same license.
+
+Full legal text: https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode
+Summary:         https://creativecommons.org/licenses/by-nc-sa/4.0/
+
+Credits
+- The USB link and TMIA framing in patches/numtube-epsilon.patch come from
+  Termia by Matin (https://github.com/Matinthereal/termia), CC BY-NC-SA 4.0,
+  with fixes and changes made for NumTube.
+
+This repository does not contain NumWorks Epsilon. The patch applies to
+NumWorks' own source code, which each user downloads from
+https://github.com/numworks/epsilon. Epsilon is copyright NumWorks, all rights
+reserved, and is not covered by this license. NumWorks is a registered
+trademark of NumWorks.

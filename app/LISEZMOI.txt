@@ -1,0 +1,46 @@
+NumTube : YouTube sur ta calculatrice NumWorks
+==============================================
+
+Ce qu'il faut
+- Une NumWorks N0120 ou N0115 (le modèle est écrit au dos).
+- Un câble USB qui transfère les données (pas seulement la charge).
+- Cet ordinateur reste branché à la calculatrice pendant que tu regardes :
+  c'est lui qui va chercher les vidéos sur YouTube.
+
+1. Lancer NumTube
+- Mac : double-clic sur NumTube.app. La première fois, macOS bloque les
+  applis non signées : clic droit sur NumTube.app > Ouvrir > Ouvrir.
+  (ou Réglages Système > Confidentialité et sécurité > Ouvrir quand même)
+- Windows : double-clic sur NumTube.exe. Si Windows SmartScreen s'affiche :
+  « Informations complémentaires » > « Exécuter quand même ».
+- Linux : une seule fois, dans un terminal ouvert dans ce dossier :
+      sudo ./installer-regle-usb.sh
+  puis lance ./NumTube
+
+Une page s'ouvre dans ton navigateur. Laisse NumTube ouvert.
+
+2. Installer NumTube sur la calculatrice (une seule fois)
+- Branche la calculatrice. Elle affiche « Calculatrice connectée »
+  (sinon : reset au dos avec un trombone, puis rebranche).
+- Sur la page, vérifie la version officielle (Paramètres > À propos > Version
+  sur la calculatrice) et clique « Installer sur la calculatrice ».
+- Environ 1 minute. La calculatrice redémarre avec un écran
+  « UNOFFICIAL SOFTWARE » : c'est normal.
+
+3. Regarder des vidéos
+- Ouvre l'appli NumTube (icône rouge) sur la calculatrice.
+- Tape ta recherche, EXE. Choisis une vidéo avec les flèches, OK.
+- Pendant la vidéo : OK pause, gauche/droite ±10 s, haut/bas ±1 min,
+  la flèche retour arrête.
+- Pas de son sur NumWorks : les sous-titres s'affichent sous l'image.
+
+Revenir au firmware officiel
+- Appuie sur reset au dos de la calculatrice : rien n'a été effacé,
+  le firmware officiel est toujours là.
+
+Problèmes
+- « Le PC ne répond pas » : l'appli NumTube n'est pas ouverte sur l'ordinateur.
+- La calculatrice affiche « OFFICIAL UPGRADE REQUIRED » : la version saisie
+  ne correspond pas. Reset au dos, puis réinstalle avec la bonne version.
+- Testé avec la version officielle 26.4.0. D'autres versions peuvent ne pas
+  fonctionner ; un reset ramène toujours le firmware officiel.
