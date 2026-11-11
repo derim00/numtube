@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NumTube</title>
+<title>NumSocial</title>
 <style>
   :root {
     --bg: #f6f6f4; --card: #ffffff; --text: #1b1b1b; --muted: #6b6b6b;
@@ -66,12 +66,21 @@
     max-height: 260px; overflow: auto; white-space: pre-wrap; word-break: break-word;
   }
   footer { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 14px; }
+  .apps { display: grid; gap: 8px; }
+  .app {
+    display: flex; gap: 12px; align-items: flex-start; font-weight: 400; margin: 0;
+    padding: 12px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer;
+  }
+  .app:has(input:checked) { border-color: var(--accent); }
+  .app input { width: 18px; height: 18px; margin: 3px 0 0; accent-color: var(--accent); flex: none; }
+  .app b { display: block; }
+  .app span { color: var(--muted); font-size: 14px; }
   [hidden] { display: none !important; }
 </style>
 </head>
 <body>
 <main>
-  <header><div class="logo"></div><h1>NumTube</h1></header>
+  <header><div class="logo"></div><h1>NumSocial</h1></header>
 
   <section class="card">
     <div class="status">
@@ -85,12 +94,20 @@
   </section>
 
   <section class="card" id="install" hidden>
-    <h2 style="margin:0;font-size:18px">Installer NumTube</h2>
-    <p class="hint" style="margin:4px 0 0">Le firmware officiel n'est pas effacé : NumTube va dans l'autre emplacement.
+    <h2 style="margin:0;font-size:18px">Installer sur la calculatrice</h2>
+    <p class="hint" style="margin:4px 0 0">Le firmware officiel n'est pas effacé : les applis vont dans l'autre emplacement.
       Un reset au dos de la calculatrice ramène le firmware officiel.</p>
     <label for="version">Version officielle de la calculatrice</label>
     <input id="version" placeholder="26.4.0" autocomplete="off">
     <div class="hint" id="versionHint">Sur la calculatrice : Paramètres → À propos → Version.</div>
+    <label>Applis à installer</label>
+    <div class="apps">
+      <label class="app"><input type="checkbox" id="appNumtube" checked>
+        <div><b>NumTube</b><span>YouTube sur la calculatrice, avec les sous-titres.</span></div></label>
+      <label class="app"><input type="checkbox" id="appNumchat" checked>
+        <div><b>NumChat</b><span>Tes messages Snapchat, à lire et à écrire depuis la calculatrice.
+          Il faut Google Chrome sur cet ordinateur : la première fois, connecte-toi à Snapchat dans la fenêtre qui s'ouvre.</span></div></label>
+    </div>
     <button id="go">Installer sur la calculatrice</button>
     <div class="bar" id="bar" hidden><div id="fill"></div></div>
     <div class="result" id="result"></div>
@@ -104,7 +121,7 @@
   </section>
 
   <footer>
-    <span>Laisse cette appli ouverte pendant que tu regardes des vidéos.</span>
+    <span>Laisse cette appli ouverte pendant que tu utilises NumTube ou NumChat.</span>
     <button class="quiet" id="quit">Quitter</button>
   </footer>
 </main>
@@ -125,7 +142,7 @@ function setStatus(kind, title, text, steps) {
 async function refresh() {
   let s;
   try { s = await (await fetch("/api/state", { cache: "no-store" })).json(); }
-  catch { setStatus("warn", "L'appli NumTube est fermée", "Relance-la pour continuer."); return; }
+  catch { setStatus("warn", "L'appli NumSocial est fermée", "Relance-la pour continuer."); return; }
 
   const linux = s.platform.startsWith("linux");
   if (s.installing) {
@@ -135,17 +152,17 @@ async function refresh() {
     setStatus("go", "Calculatrice prête pour l'installation",
       `Modèle ${d.model.toUpperCase()}. Clique sur « Installer ».`);
   } else if (s.calculator === "numtube") {
-    setStatus("ok", "NumTube est connecté",
-      "Fais une recherche sur la calculatrice : les vidéos passent par cet ordinateur.");
+    setStatus("ok", "La calculatrice est connectée",
+      "Les vidéos (NumTube) et les messages (NumChat) passent par cet ordinateur.");
   } else if (s.calculator === "error") {
     setStatus("warn", "La calculatrice est branchée mais inaccessible",
       linux ? "Sous Linux, autorise l'accès USB une fois :" : (s.detail.error || ""),
-      linux ? ["Ouvre un terminal dans le dossier de NumTube", "Lance : sudo ./installer-regle-usb.sh", "Débranche et rebranche la calculatrice"] : []);
+      linux ? ["Ouvre un terminal dans le dossier de NumSocial", "Lance : sudo ./installer-regle-usb.sh", "Débranche et rebranche la calculatrice"] : []);
   } else {
     setStatus("", "Branche ta calculatrice", "", [
       "Relie-la à cet ordinateur avec un câble USB qui transfère les données.",
       "Pour installer : elle doit afficher « Calculatrice connectée ». Sinon, appuie sur reset au dos puis rebranche.",
-      "Si NumTube est déjà installé : ouvre l'appli NumTube et fais une recherche.",
+      "Si c'est déjà installé : ouvre NumTube ou NumChat sur la calculatrice.",
     ]);
   }
 
@@ -158,7 +175,7 @@ async function refresh() {
   $("bar").hidden = !s.installing && s.progress === 0;
   $("fill").style.width = s.progress + "%";
   const r = $("result");
-  r.textContent = s.installResult === "ok" ? "C'est installé ! Ouvre l'appli NumTube sur la calculatrice." : s.installResult;
+  r.textContent = s.installResult === "ok" ? "C'est installé ! Ouvre l'appli sur la calculatrice (en bas de l'écran d'accueil)." : s.installResult;
   r.className = "result " + (s.installResult === "ok" ? "ok" : s.installResult ? "err" : "");
 
   const log = $("log");
@@ -175,13 +192,20 @@ $("go").addEventListener("click", async () => {
     $("version").focus();
     return;
   }
+  const apps = [["numtube", "appNumtube"], ["numchat", "appNumchat"]]
+    .filter(([, id]) => $(id).checked).map(([name]) => name);
+  if (!apps.length) {
+    $("result").textContent = "Choisis au moins une appli.";
+    $("result").className = "result err";
+    return;
+  }
   $("go").disabled = true;
-  await fetch("/api/install", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version }) });
+  await fetch("/api/install", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version, apps }) });
   refresh();
 });
 $("quit").addEventListener("click", async () => {
   try { await fetch("/api/quit", { method: "POST" }); } catch {}
-  setStatus("warn", "NumTube est fermé", "Tu peux fermer cet onglet.");
+  setStatus("warn", "NumSocial est fermé", "Tu peux fermer cet onglet.");
   clearInterval(timer);
 });
 const timer = setInterval(refresh, 1000);

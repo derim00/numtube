@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Starts the NumSocial gateway (NumTube + NumChat) without the app.
+# Creates its Python environment on first run. Options: see --help.
+set -euo pipefail
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+VENV="$ROOT/.venv"
+if ! "$VENV/bin/python3" -c 'import numpy, usb.core, libusb_package, PIL, playwright' >/dev/null 2>&1; then
+  echo "Préparation de l'environnement Python..."
+  [ -x "$VENV/bin/python3" ] || python3 -m venv "$VENV"
+  "$VENV/bin/pip" -q install numpy pyusb libusb-package pillow playwright yt-dlp
+fi
+exec "$VENV/bin/python3" "$ROOT/gateway/numtube_gateway.py" "$@"

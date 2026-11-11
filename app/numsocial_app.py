@@ -1,4 +1,5 @@
-"""NumTube: one app to install NumTube on a NumWorks and run the YouTube gateway.
+"""NumSocial: one app to install NumTube (YouTube) and NumChat (Snapchat) on a
+NumWorks, and to run their gateway.
 
 Double-click it: a page opens in the browser with the install button, and the
 gateway runs in the background as long as the app is open.
@@ -13,7 +14,7 @@ import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-APP_VERSION = "1.0"
+APP_VERSION = "2.0"
 
 if len(sys.argv) > 1 and sys.argv[1] == "--yt-dlp":
     # The gateway runs yt-dlp as a subprocess of this very executable.
@@ -38,6 +39,13 @@ if len(sys.argv) > 1 and sys.argv[1] == "--self-test":
     backend = libusb_package.get_libusb1_backend()
     print("libusb:", "ok" if backend else "MISSING")
     list(usb.core.find(find_all=True, backend=backend))
+    from playwright._impl._driver import compute_driver_executable
+
+    driver = compute_driver_executable()
+    driver = driver if isinstance(driver, (list, tuple)) else [driver]
+    print("playwright:", subprocess.run([*map(str, driver), "--version"], capture_output=True,
+                                        text=True).stdout.strip() or "MISSING")
+    import numchat_media, numchat_service, numchat_snap  # noqa: F401  (NumChat loads)
     firmware = sorted(os.listdir(os.path.join(here, "firmware")))
     print("firmware:", firmware)
     sys.exit(0 if backend and firmware else 1)
@@ -128,13 +136,13 @@ def monitor_usb() -> None:
         time.sleep(1)
 
 
-def run_install(version: str) -> None:
+def run_install(version: str, apps: list[str]) -> None:
     with STATE.lock:
         STATE.installing, STATE.progress, STATE.install_result = True, 0, ""
     try:
-        flasher.install(version, app_log, lambda p: setattr(STATE, "progress", p))
+        flasher.install(version, app_log, lambda p: setattr(STATE, "progress", p), apps)
         result = "ok"
-        app_log("Installation terminée. Ouvre l'application NumTube sur la calculatrice.")
+        app_log("Installation terminée. Ouvre l'appli sur la calculatrice.")
     except Exception as error:
         result = f"Erreur : {error}"
         app_log(result)
@@ -190,7 +198,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(409, b"", "text/plain")
                 return
             version = str(body.get("version", "")).strip()
-            threading.Thread(target=run_install, args=(version,), daemon=True).start()
+            apps = [str(a) for a in body.get("apps") or ["numtube", "numchat"]]
+            threading.Thread(target=run_install, args=(version, apps), daemon=True).start()
             self._send(202, b"{}", "application/json")
         elif self.path == "/api/quit":
             self._send(200, b"{}", "application/json")
@@ -206,7 +215,7 @@ def main() -> None:
     except OSError:
         webbrowser.open(url)  # already running: just show it
         return
-    app_log(f"NumTube {APP_VERSION} demarre")
+    app_log(f"NumSocial {APP_VERSION} demarre")
     threading.Thread(target=monitor_usb, daemon=True).start()
     threading.Thread(target=run_gateway, daemon=True).start()
     threading.Timer(0.5, lambda: webbrowser.open(url)).start()

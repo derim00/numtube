@@ -1,46 +1,70 @@
-NumTube : YouTube sur ta calculatrice NumWorks
-==============================================
+NumSocial : YouTube (NumTube) et Snapchat (NumChat) sur ta NumWorks
+===================================================================
 
 Ce qu'il faut
-- Une NumWorks N0120 ou N0115 (le modèle est écrit au dos).
+- Une NumWorks N0120 ou N0115 (le modèle est écrit au dos), en version
+  officielle 26.4.0 (testé).
 - Un câble USB qui transfère les données (pas seulement la charge).
-- Cet ordinateur reste branché à la calculatrice pendant que tu regardes :
-  c'est lui qui va chercher les vidéos sur YouTube.
+- Cet ordinateur reste branché à la calculatrice : c'est lui qui va chercher
+  les vidéos (NumTube) et les messages (NumChat).
+- Pour NumChat : Google Chrome (sous Windows, Microsoft Edge marche aussi) et
+  un compte Snapchat. Lis l'avertissement plus bas.
 
-1. Lancer NumTube
-- Mac : double-clic sur NumTube.app. La première fois, macOS bloque les
-  applis non signées : clic droit sur NumTube.app > Ouvrir > Ouvrir.
+1. Lancer NumSocial
+- Mac : double-clic sur NumSocial.app. La première fois, macOS bloque les
+  applis non signées : clic droit sur NumSocial.app > Ouvrir > Ouvrir.
   (ou Réglages Système > Confidentialité et sécurité > Ouvrir quand même)
-- Windows : double-clic sur NumTube.exe. Si Windows SmartScreen s'affiche :
+- Windows : double-clic sur NumSocial\NumSocial.exe. Si SmartScreen s'affiche :
   « Informations complémentaires » > « Exécuter quand même ».
-- Linux : une seule fois, dans un terminal ouvert dans ce dossier :
-      sudo ./installer-regle-usb.sh
-  puis lance ./NumTube
 
-Une page s'ouvre dans ton navigateur. Laisse NumTube ouvert.
+Une page s'ouvre dans ton navigateur. Laisse NumSocial ouvert.
 
-2. Installer NumTube sur la calculatrice (une seule fois)
+2. Installer sur la calculatrice (une seule fois)
 - Branche la calculatrice. Elle affiche « Calculatrice connectée »
   (sinon : reset au dos avec un trombone, puis rebranche).
-- Sur la page, vérifie la version officielle (Paramètres > À propos > Version
-  sur la calculatrice) et clique « Installer sur la calculatrice ».
+- Sur la page : vérifie la version officielle (lue automatiquement), coche
+  les applis voulues (NumTube, NumChat ou les deux), clique « Installer ».
 - Environ 1 minute. La calculatrice redémarre avec un écran
-  « UNOFFICIAL SOFTWARE » : c'est normal.
+  « UNOFFICIAL SOFTWARE » : c'est normal. Les applis sont en bas de l'accueil.
 
-3. Regarder des vidéos
-- Ouvre l'appli NumTube (icône rouge) sur la calculatrice.
+3. NumTube (YouTube)
 - Tape ta recherche, EXE. Choisis une vidéo avec les flèches, OK.
 - Pendant la vidéo : OK pause, gauche/droite ±10 s, haut/bas ±1 min,
-  la flèche retour arrête.
-- Pas de son sur NumWorks : les sous-titres s'affichent sous l'image.
+  retour arrête. Pas de son : les sous-titres s'affichent sous l'image.
+
+4. NumChat (Snapchat)
+- Première fois : ouvre NumChat sur la calculatrice. Une fenêtre Chrome
+  s'ouvre sur l'ordinateur, sur Snapchat Web : connecte-toi TOI-MÊME dedans
+  (identifiant, mot de passe, code). NumSocial ne voit jamais ton mot de passe.
+  Ensuite, laisse cette fenêtre ouverte (tu peux la mettre derrière les autres).
+- Liste : haut/bas pour choisir, OK pour ouvrir, retour pour quitter.
+- Conversation :
+    lettres         alpha est verrouillé au départ
+    alpha           passer aux chiffres et revenir
+    shift           majuscule
+    Ans             après une lettre : fait défiler les accents (é è ê ë...)
+    x10^x           apostrophe
+    effacer         efface ; shift + effacer vide tout
+    EXE             envoie le message
+    haut/bas        défile d'une ligne ; gauche/droite d'une page
+    OK              (sans texte tapé) ouvre le snap marqué « OK : voir »
+    retour          revient à la liste
+- Un snap ouvert est consommé, comme sur le téléphone : l'expéditeur voit
+  « Ouvert ». Rien n'est enregistré sur l'ordinateur.
+
+Avertissement Snapchat
+- Piloter Snapchat Web automatiquement est contraire aux conditions
+  d'utilisation de Snapchat. Ton compte peut être verrouillé, voire banni.
+  Essaie d'abord avec un compte secondaire.
 
 Revenir au firmware officiel
 - Appuie sur reset au dos de la calculatrice : rien n'a été effacé,
   le firmware officiel est toujours là.
 
 Problèmes
-- « Le PC ne répond pas » : l'appli NumTube n'est pas ouverte sur l'ordinateur.
-- La calculatrice affiche « OFFICIAL UPGRADE REQUIRED » : la version saisie
-  ne correspond pas. Reset au dos, puis réinstalle avec la bonne version.
-- Testé avec la version officielle 26.4.0. D'autres versions peuvent ne pas
-  fonctionner ; un reset ramène toujours le firmware officiel.
+- « Le Mac ne répond plus » / « Le PC ne répond pas » : NumSocial n'est pas
+  ouvert sur l'ordinateur.
+- NumChat affiche « Connecte Snapchat dans Chrome » : connecte-toi dans la
+  fenêtre Chrome ouverte par NumSocial.
+- « OFFICIAL UPGRADE REQUIRED » : la version saisie ne correspond pas.
+  Reset au dos, puis réinstalle avec la bonne version.

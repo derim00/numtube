@@ -61,8 +61,20 @@ index 2f9e6272d5..78dde23489 100644
    void refreshPreferences();
    void reloadTitleBarView();
    bool updateAlphaLock();
+diff --git a/epsilon/apps/home/Makefile b/epsilon/apps/home/Makefile
+index 22d935a989..e51baf487a 100644
+--- a/epsilon/apps/home/Makefile
++++ b/epsilon/apps/home/Makefile
+@@ -3,6 +3,7 @@ SOURCES_apps += $(addprefix $(PATH_apps)/home/,$(addsuffix :-test, \
+   app_cell.cpp \
+   controller.cpp \
+   apps_layout.cpp \
++  homebrew_apps.cpp \
+ ))
+ 
+ $(call i18n_without_universal,home/i18n/base)
 diff --git a/epsilon/apps/home/apps_layout.csv b/epsilon/apps/home/apps_layout.csv
-index e0273c401b..26ffa5b3e9 100644
+index e0273c401b..2537dfa86b 100644
 --- a/epsilon/apps/home/apps_layout.csv
 +++ b/epsilon/apps/home/apps_layout.csv
 @@ -1,5 +1,5 @@
@@ -71,13 +83,191 @@ index e0273c401b..26ffa5b3e9 100644
 -Variant2,calculation,graph,solver,regression,sequence,distributions,statistics,code,elements,inference,finance,settings
 -Variant3,calculation,graph,solver,statistics,distributions,sequence,regression,inference,finance,elements,code,settings
 -Variant4,calculation,graph,solver,statistics,regression,sequence,distributions,inference,finance,elements,code,settings
-+Default,calculation,graph,code,statistics,distributions,solver,sequence,regression,elements,inference,finance,settings,termia,numtube
-+Variant1,calculation,graph,solver,statistics,regression,distributions,inference,sequence,code,elements,finance,settings,termia,numtube
-+Variant2,calculation,graph,solver,regression,sequence,distributions,statistics,code,elements,inference,finance,settings,termia,numtube
-+Variant3,calculation,graph,solver,statistics,distributions,sequence,regression,inference,finance,elements,code,settings,termia,numtube
-+Variant4,calculation,graph,solver,statistics,regression,sequence,distributions,inference,finance,elements,code,settings,termia,numtube
++Default,calculation,graph,code,statistics,distributions,solver,sequence,regression,elements,inference,finance,settings,termia,numtube,numchat
++Variant1,calculation,graph,solver,statistics,regression,distributions,inference,sequence,code,elements,finance,settings,termia,numtube,numchat
++Variant2,calculation,graph,solver,regression,sequence,distributions,statistics,code,elements,inference,finance,settings,termia,numtube,numchat
++Variant3,calculation,graph,solver,statistics,distributions,sequence,regression,inference,finance,elements,code,settings,termia,numtube,numchat
++Variant4,calculation,graph,solver,statistics,regression,sequence,distributions,inference,finance,elements,code,settings,termia,numtube,numchat
+diff --git a/epsilon/apps/home/controller.cpp b/epsilon/apps/home/controller.cpp
+index 8dc01efaf4..a1ba087e17 100644
+--- a/epsilon/apps/home/controller.cpp
++++ b/epsilon/apps/home/controller.cpp
+@@ -7,6 +7,7 @@
+ #include <poincare/preferences.h>
+ 
+ #include "app.h"
++#include "homebrew_apps.h"
+ 
+ extern "C" {
+ #include <assert.h>
+@@ -95,7 +96,7 @@ bool Controller::handleEvent(Ion::Events::Event event) {
+     } else {
+       iconIndex = eventText[0] - '1';
+     }
+-    if (iconIndex >= AppsContainer::sharedAppsContainer()->numberOfApps()) {
++    if (iconIndex >= numberOfVisibleApps()) {
+       return false;
+     }
+     int col = columnOfIconAtIndex(iconIndex);
+@@ -141,18 +142,18 @@ void Controller::fillCellForLocation(HighlightCell* cell, int column, int row) {
+   AppCell* appCell = static_cast<AppCell*>(cell);
+   AppsContainer* container = AppsContainer::sharedAppsContainer();
+   int appIdx = indexOfAppAtColumnAndRow(column, row);
+-  if (appIdx >= container->numberOfApps()) {
++  if (appIdx >= numberOfVisibleApps()) {
+     appCell->setVisible(false);
+   } else {
+     appCell->setVisible(true);
+-    if (appIdx < container->numberOfBuiltinApps()) {
++    if (appIdx < numberOfVisibleBuiltinApps()) {
+       const ::App::Descriptor* descriptor =
+-          container->appSnapshotAtIndex(PermutedAppSnapshotIndex(appIdx))
++          container->appSnapshotAtIndex(snapshotIndexForApp(appIdx))
+               ->descriptor();
+       appCell->setBuiltinAppDescriptor(descriptor);
+     } else {
+       Ion::ExternalApps::App a = container->externalAppAtIndex(
+-          appIdx - container->numberOfBuiltinApps());
++          appIdx - numberOfVisibleBuiltinApps());
+       appCell->setExternalApp(a);
+     }
+   }
+@@ -161,7 +162,44 @@ void Controller::fillCellForLocation(HighlightCell* cell, int column, int row) {
+ int Controller::numberOfIcons() const {
+   AppsContainer* container = AppsContainer::sharedAppsContainer();
+   assert(container->numberOfApps() > 0);
+-  return container->numberOfApps() - 1;
++  (void)container;
++  return numberOfVisibleApps() - 1;
++}
++
++/* Hidden homebrew apps (see homebrew_apps.h) are skipped: app indices below
++ * count only the visible ones, in the order of the Home layout. */
++bool Controller::layoutAppIsHidden(int layoutIndex) const {
++  ::App::Snapshot* snapshot = AppsContainer::sharedAppsContainer()->appSnapshotAtIndex(
++      PermutedAppSnapshotIndex(layoutIndex));
++  return homebrewAppIsHidden(snapshot->descriptor()->name());
++}
++
++int Controller::numberOfVisibleBuiltinApps() const {
++  const int builtin = AppsContainer::sharedAppsContainer()->numberOfBuiltinApps();
++  int visible = 1;  // Home itself
++  for (int i = 1; i < builtin; i++) {
++    visible += !layoutAppIsHidden(i);
++  }
++  return visible;
++}
++
++int Controller::numberOfVisibleApps() const {
++  return numberOfVisibleBuiltinApps() +
++         AppsContainer::sharedAppsContainer()->numberOfExternalApps();
++}
++
++int Controller::snapshotIndexForApp(int appIdx) const {
++  const int builtin = AppsContainer::sharedAppsContainer()->numberOfBuiltinApps();
++  int visible = 0;
++  for (int i = 1; i < builtin; i++) {
++    if (layoutAppIsHidden(i)) {
++      continue;
++    }
++    if (++visible == appIdx) {
++      return PermutedAppSnapshotIndex(i);
++    }
++  }
++  return PermutedAppSnapshotIndex(appIdx);  // Home (appIdx 0)
+ }
+ 
+ void Controller::tableViewDidChangeSelectionAndDidScroll(
+@@ -187,9 +225,9 @@ void Controller::switchToSelectedApp() {
+   AppsContainer* container = AppsContainer::sharedAppsContainer();
+   int appIdx = indexOfAppAtColumnAndRow(selectionDataSource()->selectedColumn(),
+                                         selectionDataSource()->selectedRow());
+-  if (appIdx < container->numberOfBuiltinApps()) {
++  if (appIdx < numberOfVisibleBuiltinApps()) {
+     ::App::Snapshot* selectedSnapshot =
+-        container->appSnapshotAtIndex(PermutedAppSnapshotIndex(appIdx));
++        container->appSnapshotAtIndex(snapshotIndexForApp(appIdx));
+     if (appIsForbidden(selectedSnapshot->descriptor()->name())) {
+       App::app()->displayWarning(forbiddenAppMessage());
+     } else {
+@@ -199,7 +237,7 @@ void Controller::switchToSelectedApp() {
+     assert(ExamModeManager::ExamMode().ruleset() == ExamMode::Ruleset::Off);
+     m_view.reload();
+     Ion::ExternalApps::App a = container->externalAppAtIndex(
+-        appIdx - container->numberOfBuiltinApps());
++        appIdx - numberOfVisibleBuiltinApps());
+     container->switchToExternalApp(a);
+   }
+ }
+diff --git a/epsilon/apps/home/controller.h b/epsilon/apps/home/controller.h
+index 9b3aa8360b..bad59e45e0 100644
+--- a/epsilon/apps/home/controller.h
++++ b/epsilon/apps/home/controller.h
+@@ -48,6 +48,10 @@ class Controller : public Escher::ViewController,
+   KDCoordinate defaultColumnWidth() override { return k_cellWidth; }
+ 
+   int numberOfIcons() const;
++  bool layoutAppIsHidden(int layoutIndex) const;
++  int numberOfVisibleBuiltinApps() const;
++  int numberOfVisibleApps() const;
++  int snapshotIndexForApp(int appIdx) const;
+   Escher::SelectableTableViewDataSource* selectionDataSource() const;
+   void switchToSelectedApp();
+   bool appIsForbidden(I18n::Message appName) const;
+diff --git a/epsilon/apps/home/homebrew_apps.cpp b/epsilon/apps/home/homebrew_apps.cpp
+new file mode 100644
+index 0000000000..0fb06b3303
+--- /dev/null
++++ b/epsilon/apps/home/homebrew_apps.cpp
+@@ -0,0 +1,27 @@
++#include "homebrew_apps.h"
++
++#include <stdint.h>
++
++namespace Home {
++
++namespace {
++
++struct HomebrewConfig {
++  char magic[16];
++  uint32_t hiddenApps;  // bit 0: NumTube, bit 1: NumChat
++};
++
++/* volatile: the value is patched in the image after compilation, the compiler
++ * must not fold it. Keep in sync with app/flasher.py. */
++__attribute__((used)) const volatile HomebrewConfig k_homebrewConfig = {
++    "NUMAPPS-HIDDEN1", 0};
++
++}  // namespace
++
++bool homebrewAppIsHidden(I18n::Message appName) {
++  const uint32_t hidden = k_homebrewConfig.hiddenApps;
++  return (appName == I18n::Message::NumtubeApp && (hidden & 1)) ||
++         (appName == I18n::Message::NumchatApp && (hidden & 2));
++}
++
++}  // namespace Home
+diff --git a/epsilon/apps/home/homebrew_apps.h b/epsilon/apps/home/homebrew_apps.h
+new file mode 100644
+index 0000000000..61bce847d5
+--- /dev/null
++++ b/epsilon/apps/home/homebrew_apps.h
+@@ -0,0 +1,13 @@
++#pragma once
++
++#include <apps/i18n.h>
++
++namespace Home {
++
++/* Which homebrew apps (NumTube, NumChat) show on the Home screen. Both are
++ * always compiled in; the installer on the computer hides the ones the user
++ * did not pick by writing a bit mask into this firmware image (it finds the
++ * mask by its magic string, like it finds the version in the header). */
++bool homebrewAppIsHidden(I18n::Message appName);
++
++}  // namespace Home
 diff --git a/epsilon/apps/module.mak b/epsilon/apps/module.mak
-index e21c795826..fe8d7a888a 100644
+index e21c795826..a3a8d476d9 100644
 --- a/epsilon/apps/module.mak
 +++ b/epsilon/apps/module.mak
 @@ -32,7 +32,7 @@ $(call depends_on_image,$(PATH_apps)/title_bar_view.cpp,$(PATH_apps)/exam_icon.p
@@ -85,10 +275,1807 @@ index e21c795826..fe8d7a888a 100644
  # Include the specific apps
  # FIXME Use flavors instead of EPSILON_APPS?
 -EPSILON_APPS ?= calculation graph code statistics distributions inference solver sequence regression elements finance settings
-+EPSILON_APPS ?= calculation graph code statistics distributions inference solver sequence regression elements finance settings termia numtube
++EPSILON_APPS ?= calculation graph code statistics distributions inference solver sequence regression elements finance settings termia numtube numchat
  
  _apps_classes := $(foreach a,$(EPSILON_APPS),$(call capitalize,$a)::App)
  _apps_snapshots_declaration := $(foreach a,$(_apps_classes),$a::Snapshot m_snapshot$(subst :,,$a)Snapshot;)
+diff --git a/epsilon/apps/numchat/Makefile b/epsilon/apps/numchat/Makefile
+new file mode 100644
+index 0000000000..bb6ac97350
+--- /dev/null
++++ b/epsilon/apps/numchat/Makefile
+@@ -0,0 +1,11 @@
++SOURCES_apps += $(addprefix $(PATH_apps)/numchat/,$(addsuffix :-test, \
++  app.cpp \
++  chat_controller.cpp \
++  chat_view.cpp \
++  text_input.cpp \
++  numchat_icon.png \
++))
++
++$(call depends_on_image,$(PATH_apps)/numchat/app.cpp,$(PATH_apps)/numchat/numchat_icon.png)
++
++$(call i18n_with_universal,numchat/i18n/base)
+diff --git a/epsilon/apps/numchat/app.cpp b/epsilon/apps/numchat/app.cpp
+new file mode 100644
+index 0000000000..22f5cda611
+--- /dev/null
++++ b/epsilon/apps/numchat/app.cpp
+@@ -0,0 +1,35 @@
++#include "app.h"
++
++#include <escher/container.h>
++#include <ion/events.h>
++
++#include "numchat_icon.h"
++
++namespace Numchat {
++
++const Escher::Image* App::Descriptor::icon() const {
++  return ImageStore::NumchatIcon;
++}
++
++App* App::Snapshot::unpack(Escher::Container* container) {
++  return new (container->currentAppBuffer()) App(this);
++}
++
++const App::Descriptor* App::Snapshot::descriptor() const {
++  constexpr static Descriptor s_descriptor;
++  return &s_descriptor;
++}
++
++App::App(Snapshot* snapshot)
++    : Escher::App(snapshot, &m_controller),
++      m_controller(&m_modalViewController),
++      m_usbTimer(&m_controller) {}
++
++void App::willBecomeInactive() {
++  // Give the USB port back, and leave the keyboard as we found it.
++  m_controller.disconnect();
++  Ion::Events::setShiftAlphaStatus(Ion::Events::ShiftAlphaStatus());
++  Escher::App::willBecomeInactive();
++}
++
++}  // namespace Numchat
+diff --git a/epsilon/apps/numchat/app.h b/epsilon/apps/numchat/app.h
+new file mode 100644
+index 0000000000..4f8a2caed8
+--- /dev/null
++++ b/epsilon/apps/numchat/app.h
+@@ -0,0 +1,51 @@
++#pragma once
++
++#include <apps/i18n.h>
++#include <escher/app.h>
++
++#include "chat_controller.h"
++
++namespace Numchat {
++
++class App : public Escher::App {
++ public:
++  class Descriptor : public Escher::App::Descriptor {
++   public:
++    I18n::Message name() const override { return I18n::Message::NumchatApp; }
++    I18n::Message upperName() const override {
++      return I18n::Message::NumchatAppCapital;
++    }
++    const Escher::Image* icon() const override;
++  };
++
++  class Snapshot : public Escher::App::Snapshot {
++   public:
++    App* unpack(Escher::Container* container) override;
++    const Descriptor* descriptor() const override;
++  };
++
++  void willBecomeInactive() override;
++  int numberOfTimers() override { return 1; }
++  Escher::Timer* timerAtIndex(int i) override { return &m_usbTimer; }
++
++ private:
++  // Starts the session once the app is on screen (every tick, 100 ms).
++  class UsbTimer : public Escher::Timer {
++   public:
++    explicit UsbTimer(ChatController* controller)
++        : Escher::Timer(1), m_controller(controller) {}
++
++   private:
++    bool fire() override {
++      m_controller->tick();
++      return false;
++    }
++    ChatController* m_controller;
++  };
++
++  App(Snapshot* snapshot);
++  ChatController m_controller;
++  UsbTimer m_usbTimer;
++};
++
++}  // namespace Numchat
+diff --git a/epsilon/apps/numchat/chat_controller.cpp b/epsilon/apps/numchat/chat_controller.cpp
+new file mode 100644
+index 0000000000..2b70f466a0
+--- /dev/null
++++ b/epsilon/apps/numchat/chat_controller.cpp
+@@ -0,0 +1,635 @@
++#include "chat_controller.h"
++
++#include <apps/apps_container.h>
++#include <ion/display.h>
++#include <ion/events.h>
++#include <ion/timing.h>
++#include <ion/usb.h>
++#include <string.h>
++
++#include "protocol.h"
++
++namespace Numchat {
++
++using Numtube::KeyWatcher;
++using Ion::Keyboard::Key;
++
++namespace {
++
++constexpr uint32_t k_pingIntervalMs = 4000;
++// No frame at all from the gateway for this long: it is gone.
++constexpr uint32_t k_gatewayTimeoutMs = 13000;
++constexpr uint32_t k_sendTimeoutMs = 20000;
++
++void copyString(char* destination, size_t capacity, const char* source,
++                size_t length) {
++  size_t count = length < capacity - 1 ? length : capacity - 1;
++  // Never cut a UTF-8 sequence (or a letter from its accent) in two.
++  if (count < length) {
++    while (count > 0 &&
++           ((static_cast<uint8_t>(source[count]) & 0xC0) == 0x80 ||
++            static_cast<uint8_t>(source[count]) == 0xCC ||
++            static_cast<uint8_t>(source[count]) == 0xCD)) {
++      count--;
++    }
++  }
++  memcpy(destination, source, count);
++  destination[count] = '\0';
++}
++
++// Reads a str8 field. Returns false if the payload is too short.
++bool readString(const uint8_t* payload, uint16_t length, uint16_t* cursor,
++                char* destination, size_t capacity) {
++  if (*cursor >= length) {
++    destination[0] = '\0';
++    return false;
++  }
++  const uint8_t size = payload[(*cursor)++];
++  if (*cursor + size > length) {
++    destination[0] = '\0';
++    return false;
++  }
++  copyString(destination, capacity, reinterpret_cast<const char*>(payload + *cursor), size);
++  *cursor += size;
++  return true;
++}
++
++void setStatusBarModifiers(Ion::Events::ShiftAlphaStatus status) {
++  // Through the container so that the status bar indicator follows.
++  AppsContainer::sharedAppsContainer()->setShiftAlphaStatus(status);
++}
++
++bool isExitKey(Key key) { return key == Key::Home || key == Key::OnOff; }
++
++}  // namespace
++
++ChatController::ChatController(Escher::Responder* parentResponder)
++    : Escher::ViewController(parentResponder),
++      m_view(this),
++      m_screen(Screen::Start),
++      m_conversationCount(0),
++      m_pendingCount(0),
++      m_selection(0),
++      m_firstVisible(0),
++      m_messageStart(0),
++      m_messageCount(0),
++      m_scrollLines(0),
++      m_unseenBelow(false),
++      m_sending(false),
++      m_historyLoaded(false),
++      m_messageNeedsKey(false),
++      m_autoStart(true),
++      m_lastFrameTime(0),
++      m_lastPingTime(0),
++      m_sendStartTime(0),
++      m_viewing(false),
++      m_viewStillViewable(false),
++      m_mediaWidth(0),
++      m_mediaHeight(0),
++      m_viewStartTime(0),
++      m_viewTarget(-1),
++      m_emojiValid(0) {
++  m_message[0] = '\0';
++  m_status[0] = '\0';
++  m_openId[0] = '\0';
++  m_openName[0] = '\0';
++}
++
++void ChatController::viewWillAppear() { showStart(); }
++
++void ChatController::redraw(KDRect rect) {
++  m_view.redrawRect(rect);
++  AppsContainer::sharedAppsContainer()->redrawWindow();
++}
++
++void ChatController::redrawAll() { redraw(m_view.bounds()); }
++
++void ChatController::showStart() {
++  m_screen = Screen::Start;
++  m_messageNeedsKey = false;
++  m_view.redrawAll();
++}
++
++void ChatController::showMessage(const char* message, bool needsKey) {
++  copyString(m_message, sizeof(m_message), message, strlen(message));
++  m_screen = Screen::Message;
++  m_messageNeedsKey = needsKey;
++  redrawAll();
++}
++
++void ChatController::updateModifierIndicator() {
++  setStatusBarModifiers(m_input.modifiers());
++  redraw(ChatView::inputRect());
++}
++
++void ChatController::tick() {
++  // Connect as soon as the app is open (once: Back leaves to the start screen).
++  if (m_autoStart && m_screen == Screen::Start) {
++    m_autoStart = false;
++    runSession();
++  }
++}
++
++bool ChatController::ensureConnected() {
++  if (m_link.isConnected()) {
++    return true;
++  }
++  showMessage("Connexion au Mac...\nOuvre l'appli NumTube sur le Mac.\n\nRetour : annuler", false);
++  switch (m_link.connect()) {
++    case Numtube::Link::ConnectResult::Connected:
++      m_lastFrameTime = m_lastPingTime = Ion::Timing::millis();
++      return true;
++    case Numtube::Link::ConnectResult::Cancelled:
++      showStart();
++      return false;
++    case Numtube::Link::ConnectResult::NoCable:
++      showMessage("Branche la calculatrice au Mac avec le cable USB.", true);
++      return false;
++  }
++  return false;
++}
++
++bool ChatController::linkAlive() {
++  if (!Numtube::cablePlugged()) {
++    m_link.disconnect();
++    showMessage("Cable USB debranche.", true);
++    return false;
++  }
++  const uint64_t now = Ion::Timing::millis();
++  if (now - m_lastFrameTime > k_gatewayTimeoutMs) {
++    m_link.disconnect();
++    showMessage("Le Mac ne repond plus.\nL'appli NumTube est-elle ouverte ?", true);
++    return false;
++  }
++  if (now - m_lastPingTime > k_pingIntervalMs) {
++    m_lastPingTime = now;
++    m_link.send(Protocol::Ping, nullptr, 0);
++  }
++  return true;
++}
++
++/* While connected, the calculator never hands control back to Epsilon's event
++ * loop: idling there makes the USB port stop answering and the Mac drops the
++ * calculator a few seconds later. So the whole session (list, conversation,
++ * typing) runs in the loops below, and the link closes when it ends. */
++void ChatController::runSession() {
++  if (!ensureConnected()) {
++    return;
++  }
++  m_link.log("numchat: session");
++  m_emojiValid = 0;  // the gateway starts a new emoji table for each session
++  const bool lost = !browseList();
++  m_link.disconnect();
++  m_input.resetModifiers();
++  setStatusBarModifiers(Ion::Events::ShiftAlphaStatus());
++  if (!lost || m_screen != Screen::Message) {
++    showStart();
++  }
++  AppsContainer::sharedAppsContainer()->reloadTitleBarView();
++  redrawAll();
++}
++
++bool ChatController::requestList() {
++  m_pendingCount = 0;
++  return m_link.send(Protocol::List, nullptr, 0);
++}
++
++void ChatController::handleConversationFrame(const uint8_t* payload, uint16_t length) {
++  if (length < 2) {
++    return;
++  }
++  const int index = payload[0];
++  if (index == 0) {
++    m_pendingCount = 0;
++  }
++  if (index != m_pendingCount || index >= k_maxConversations) {
++    return;
++  }
++  /* Entries are written in place: the list on screen briefly mixes old and
++   * new rows, which is fine since ListDone redraws it right after. */
++  ConversationEntry& c = m_conversations[index];
++  c.flags = payload[1];
++  uint16_t cursor = 2;
++  readString(payload, length, &cursor, c.id, sizeof(c.id));
++  readString(payload, length, &cursor, c.name, sizeof(c.name));
++  readString(payload, length, &cursor, c.preview, sizeof(c.preview));
++  m_pendingCount++;
++}
++
++void ChatController::handleMessageFrame(const uint8_t* payload, uint16_t length) {
++  if (length < 2) {
++    return;
++  }
++  const bool wasAtBottom = m_scrollLines == 0;
++  int slot;
++  if (m_messageCount < k_maxMessages) {
++    slot = (m_messageStart + m_messageCount) % k_maxMessages;
++    m_messageCount++;
++  } else {
++    // Full: forget the oldest message.
++    slot = m_messageStart;
++    m_messageStart = (m_messageStart + 1) % k_maxMessages;
++  }
++  ChatMessage& m = m_messages[slot];
++  m.flags = payload[0];
++  m.mediaId = 0;
++  uint16_t cursor = 1;
++  readString(payload, length, &cursor, m.sender, sizeof(m.sender));
++  if ((m.flags & Protocol::k_viewable) && cursor < length) {
++    m.mediaId = payload[cursor++];
++  }
++  copyString(m.text, sizeof(m.text), reinterpret_cast<const char*>(payload + cursor),
++             cursor < length ? length - cursor : 0);
++  if (m.text[0] == '\0') {
++    copyString(m.text, sizeof(m.text), " ", 1);
++  }
++  if (!wasAtBottom) {
++    // Keep the lines being read in place.
++    m_scrollLines += m_view.linesForMessage(m_messageCount - 1);
++    if (!(m.flags & Protocol::k_history)) {
++      m_unseenBelow = true;
++    }
++  }
++}
++
++/* Reads every frame waiting on the link. Returns true if something on screen
++ * changed. */
++bool ChatController::pollFrames(bool inConversation, bool* linkLost) {
++  bool changed = false;
++  uint8_t type;
++  const uint8_t* payload;
++  uint16_t length;
++  int budget = 16;  // stay responsive to the keyboard during a burst
++  while (budget-- > 0 && m_link.poll(&type, &payload, &length)) {
++    m_lastFrameTime = Ion::Timing::millis();
++    switch (type) {
++      case Protocol::Conversation:
++        handleConversationFrame(payload, length);
++        break;
++      case Protocol::ListDone:
++        m_conversationCount = m_pendingCount;
++        if (m_selection >= m_conversationCount) {
++          m_selection = m_conversationCount > 0 ? m_conversationCount - 1 : 0;
++        }
++        if (m_firstVisible > m_selection) {
++          m_firstVisible = m_selection;
++        }
++        changed = !inConversation;
++        break;
++      case Protocol::Message:
++        if (inConversation) {
++          handleMessageFrame(payload, length);
++          changed = true;
++        }
++        break;
++      case Protocol::OpenDone:
++        if (inConversation) {
++          m_historyLoaded = true;
++          changed = true;
++        }
++        break;
++      case Protocol::SendResult:
++        if (inConversation && m_sending) {
++          m_sending = false;
++          if (length >= 1 && payload[0] == 1) {
++            m_input.clear();
++            copyString(m_status, sizeof(m_status), "", 0);
++          } else {
++            copyString(m_status, sizeof(m_status),
++                       length > 1 ? reinterpret_cast<const char*>(payload + 1) : "Envoi impossible",
++                       length > 1 ? length - 1 : strlen("Envoi impossible"));
++          }
++          changed = true;
++        }
++        break;
++      case Protocol::Status:
++        copyString(m_status, sizeof(m_status), reinterpret_cast<const char*>(payload), length);
++        changed = !m_viewing;
++        break;
++      case Protocol::Emoji:
++        handleEmojiFrame(payload, length);
++        changed = !m_viewing;
++        break;
++      case Protocol::MediaStart:
++        if (m_viewing && length >= 4) {
++          m_mediaWidth = payload[0] | (payload[1] << 8);
++          m_mediaHeight = payload[2] | (payload[3] << 8);
++          // Full screen, status bar included: black around the picture.
++          Ion::Display::pushRectUniform(
++              KDRect(0, 0, Ion::Display::Width, Ion::Display::Height), KDColorBlack);
++        }
++        break;
++      case Protocol::MediaRows:
++        if (m_viewing) {
++          handleMediaRows(payload, length);
++        }
++        break;
++      case Protocol::MediaEnd:
++        if (m_viewing) {
++          m_viewing = false;
++          m_viewStillViewable = length >= 1 && payload[0] == 1;
++          if (length > 1) {
++            copyString(m_status, sizeof(m_status),
++                       reinterpret_cast<const char*>(payload + 1), length - 1);
++          }
++        }
++        break;
++      default:
++        break;  // HelloAck, Pong... only count as signs of life
++    }
++  }
++  if (m_sending && Ion::Timing::millis() - m_sendStartTime > k_sendTimeoutMs) {
++    m_sending = false;
++    copyString(m_status, sizeof(m_status), "Pas de reponse du Mac", 21);
++    changed = true;
++  }
++  *linkLost = !linkAlive();
++  return changed;
++}
++
++void ChatController::moveSelection(int delta) {
++  const int next = m_selection + delta;
++  if (next < 0 || next >= m_conversationCount) {
++    return;
++  }
++  m_selection = next;
++  if (m_selection < m_firstVisible) {
++    m_firstVisible = m_selection;
++  } else if (m_selection >= m_firstVisible + ChatView::k_visibleRows) {
++    m_firstVisible = m_selection - ChatView::k_visibleRows + 1;
++  }
++  redrawAll();
++}
++
++bool ChatController::browseList() {
++  m_screen = Screen::List;
++  m_status[0] = '\0';
++  m_conversationCount = 0;
++  m_selection = m_firstVisible = 0;
++  setStatusBarModifiers(Ion::Events::ShiftAlphaStatus());
++  redrawAll();
++  if (!requestList()) {
++    showMessage("Le Mac ne repond pas.\nL'appli NumTube est-elle ouverte ?", true);
++    return false;
++  }
++  KeyWatcher keys;
++  while (true) {
++    const Key key = keys.next();
++    switch (key) {
++      case Key::Up:
++        moveSelection(-1);
++        break;
++      case Key::Down:
++        moveSelection(1);
++        break;
++      case Key::OK:
++      case Key::EXE:
++      case Key::Right:
++        if (m_conversationCount > 0) {
++          if (!runConversation(m_selection)) {
++            return false;
++          }
++          // Back in the list: refresh it, unread markers have changed.
++          m_screen = Screen::List;
++          m_status[0] = '\0';
++          setStatusBarModifiers(Ion::Events::ShiftAlphaStatus());
++          redrawAll();
++          requestList();
++          keys = KeyWatcher();
++        }
++        break;
++      case Key::Back:
++        return true;
++      default:
++        if (isExitKey(key)) {
++          return true;
++        }
++        break;
++    }
++    bool lost;
++    if (pollFrames(false, &lost)) {
++      redrawAll();
++    }
++    if (lost) {
++      return false;
++    }
++  }
++}
++
++void ChatController::scroll(int delta) {
++  const int maxScroll = m_view.totalLines() - ChatView::k_visibleLines;
++  int next = m_scrollLines + delta;
++  if (next > maxScroll) {
++    next = maxScroll;
++  }
++  if (next < 0) {
++    next = 0;
++  }
++  if (next == m_scrollLines) {
++    return;
++  }
++  m_scrollLines = next;
++  if (m_scrollLines == 0) {
++    m_unseenBelow = false;
++  }
++  redraw(ChatView::messagesRect());
++}
++
++bool ChatController::sendInput() {
++  if (m_input.isEmpty() || m_sending) {
++    return true;
++  }
++  if (!m_link.send(Protocol::Send, reinterpret_cast<const uint8_t*>(m_input.text()),
++                   static_cast<uint16_t>(m_input.length()))) {
++    copyString(m_status, sizeof(m_status), "Envoi impossible", 16);
++    return false;
++  }
++  m_sending = true;
++  m_sendStartTime = Ion::Timing::millis();
++  // Follow the conversation down to the message about to appear.
++  m_scrollLines = 0;
++  m_unseenBelow = false;
++  return true;
++}
++
++void ChatController::handleEmojiFrame(const uint8_t* payload, uint16_t length) {
++  constexpr int size = Protocol::k_emojiSize;
++  if (length < 3 + size * size * 2 || payload[0] >= Protocol::k_emojiSlots ||
++      payload[1] != size || payload[2] != size) {
++    return;
++  }
++  const int slot = payload[0];
++  const uint8_t* pixels = payload + 3;
++  for (int i = 0; i < size * size; i++) {
++    m_emojis[slot][i] = KDColor::RGB16(static_cast<uint16_t>(pixels[2 * i] | (pixels[2 * i + 1] << 8)));
++  }
++  m_emojiValid |= static_cast<uint32_t>(1) << slot;
++}
++
++void ChatController::handleMediaRows(const uint8_t* payload, uint16_t length) {
++  if (length < 6 || m_mediaWidth <= 0 || m_mediaWidth > Ion::Display::Width) {
++    return;
++  }
++  const uint16_t frame = static_cast<uint16_t>(payload[0] | (payload[1] << 8));
++  const int y = payload[2] | (payload[3] << 8);
++  const int rows = payload[4];
++  const bool last = payload[5] != 0;
++  const uint8_t* pixels = payload + 6;
++  if (length < 6 + rows * m_mediaWidth * 2) {
++    return;
++  }
++  const int x0 = (Ion::Display::Width - m_mediaWidth) / 2;
++  const int y0 = (Ion::Display::Height - m_mediaHeight) / 2;
++  KDColor line[Ion::Display::Width];
++  for (int r = 0; r < rows && y + r < m_mediaHeight; r++) {
++    const uint8_t* row = pixels + r * m_mediaWidth * 2;
++    for (int x = 0; x < m_mediaWidth; x++) {
++      line[x] = KDColor::RGB16(static_cast<uint16_t>(row[2 * x] | (row[2 * x + 1] << 8)));
++    }
++    Ion::Display::pushRect(KDRect(x0, y0 + y + r, m_mediaWidth, 1), line);
++  }
++  if (last) {
++    const uint8_t ack[2] = {static_cast<uint8_t>(frame), static_cast<uint8_t>(frame >> 8)};
++    m_link.send(Protocol::MediaAck, ack, sizeof(ack));
++  }
++}
++
++/* Shows the snap of message `index` full screen until it ends (its timer on
++ * Snapchat) or Back is pressed. Returns false if the link was lost. */
++bool ChatController::runViewer(int index) {
++  ChatMessage& target = m_messages[(m_messageStart + index) % k_maxMessages];
++  const uint8_t id = target.mediaId;
++  m_viewing = true;
++  m_viewStillViewable = true;
++  m_mediaWidth = m_mediaHeight = 0;
++  m_viewStartTime = Ion::Timing::millis();
++  copyString(m_status, sizeof(m_status), "Ouverture du snap...", 20);
++  redrawAll();
++  m_link.send(Protocol::View, &id, 1);
++  KeyWatcher keys;
++  bool stopSent = false;
++  bool lost = false;
++  while (m_viewing) {
++    const Key key = keys.next();
++    if (!stopSent && (key == Key::Back || key == Key::OK || isExitKey(key))) {
++      m_link.send(Protocol::ViewStop, nullptr, 0);
++      stopSent = true;
++      m_viewStartTime = Ion::Timing::millis();  // give the gateway time to close it
++    }
++    pollFrames(true, &lost);
++    if (lost) {
++      return false;
++    }
++    const uint64_t elapsed = Ion::Timing::millis() - m_viewStartTime;
++    if (m_viewing && ((stopSent && elapsed > 5000) ||
++                      (!stopSent && m_mediaWidth == 0 && elapsed > 15000))) {
++      m_viewing = false;  // never started, or the end was lost
++      copyString(m_status, sizeof(m_status), "Pas de reponse du Mac", 21);
++    }
++  }
++  /* The message may have moved in the ring meanwhile: find it by media id. */
++  if (!m_viewStillViewable) {
++    for (int i = 0; i < m_messageCount; i++) {
++      ChatMessage& m = m_messages[(m_messageStart + i) % k_maxMessages];
++      if ((m.flags & Protocol::k_viewable) && m.mediaId == id) {
++        m.flags &= ~Protocol::k_viewable;
++      }
++    }
++  }
++  // The viewer painted over everything, status bar included.
++  AppsContainer::sharedAppsContainer()->reloadTitleBarView();
++  redrawAll();
++  return true;
++}
++
++bool ChatController::runConversation(int index) {
++  const ConversationEntry& c = m_conversations[index];
++  copyString(m_openId, sizeof(m_openId), c.id, strlen(c.id));
++  copyString(m_openName, sizeof(m_openName), c.name, strlen(c.name));
++  m_screen = Screen::Conversation;
++  m_messageStart = m_messageCount = 0;
++  m_scrollLines = 0;
++  m_unseenBelow = false;
++  m_sending = false;
++  m_historyLoaded = false;
++  m_viewTarget = -1;
++  m_status[0] = '\0';
++  m_input.clear();
++  m_input.resetModifiers();
++  setStatusBarModifiers(m_input.modifiers());
++  redrawAll();
++  m_link.send(Protocol::Open, reinterpret_cast<const uint8_t*>(m_openId),
++              static_cast<uint16_t>(strlen(m_openId)));
++
++  KeyWatcher keys;
++  while (true) {
++    const Key key = keys.next();
++    if (key != Key::None) {
++      if (key == Key::Back || isExitKey(key)) {
++        m_link.send(Protocol::Close, nullptr, 0);
++        return true;
++      }
++      if (key == Key::Up || key == Key::Down) {
++        scroll(key == Key::Up ? 1 : -1);
++      } else if (key == Key::Left || key == Key::Right) {
++        // Page by page.
++        scroll(key == Key::Left ? ChatView::k_visibleLines - 1
++                                : -(ChatView::k_visibleLines - 1));
++      } else if (key == Key::OK && m_input.isEmpty() && !m_sending &&
++                 m_viewTarget >= 0 && m_viewTarget < m_messageCount) {
++        if (!runViewer(m_viewTarget)) {
++          return false;
++        }
++        keys = KeyWatcher();
++      } else if (key == Key::EXE || key == Key::OK) {
++        sendInput();
++        redrawAll();
++      } else if (!m_sending) {
++        switch (m_input.handleKey(key)) {
++          case TextInput::Result::Changed:
++            redraw(ChatView::inputRect());
++            break;
++          case TextInput::Result::Modifier:
++            updateModifierIndicator();
++            break;
++          case TextInput::Result::Ignored:
++            break;
++        }
++      }
++    }
++    bool lost;
++    if (pollFrames(true, &lost)) {
++      redrawAll();
++    }
++    if (lost) {
++      return false;
++    }
++  }
++}
++
++bool ChatController::handleEvent(Ion::Events::Event event) {
++  /* Plugging the cable would normally open the "connected" DFU screen, which
++   * would kill the app. We take over the USB port when a session starts. */
++  if (event == Ion::Events::USBEnumeration) {
++    Ion::USB::clearEnumerationInterrupt();
++    return true;
++  }
++  switch (m_screen) {
++    case Screen::Start:
++      if (event == Ion::Events::OK || event == Ion::Events::EXE) {
++        runSession();
++        return true;
++      }
++      return false;
++    case Screen::Message:
++      if (m_messageNeedsKey && event != Ion::Events::Home && event.isKeyPress()) {
++        showStart();
++        return true;
++      }
++      return false;
++    default:
++      return false;
++  }
++}
++
++}  // namespace Numchat
+diff --git a/epsilon/apps/numchat/chat_controller.h b/epsilon/apps/numchat/chat_controller.h
+new file mode 100644
+index 0000000000..a8d62a6528
+--- /dev/null
++++ b/epsilon/apps/numchat/chat_controller.h
+@@ -0,0 +1,129 @@
++#pragma once
++
++#include <apps/numtube/link.h>
++#include <escher/view_controller.h>
++
++#include "chat_view.h"
++#include "protocol.h"
++#include "text_input.h"
++
++namespace Numchat {
++
++class ChatController : public Escher::ViewController {
++ public:
++  explicit ChatController(Escher::Responder* parentResponder);
++
++  enum class Screen { Start, Message, List, Conversation };
++
++  struct ConversationEntry {
++    uint8_t flags;
++    char id[40];
++    char name[32];
++    char preview[64];
++  };
++  struct ChatMessage {
++    uint8_t flags;
++    uint8_t mediaId;
++    char sender[24];
++    char text[TextInput::k_capacity + 4];
++  };
++
++  static constexpr int k_maxConversations = 24;
++  static constexpr int k_maxMessages = 48;
++
++  Escher::View* view() override { return &m_view; }
++  bool handleEvent(Ion::Events::Event event) override;
++  void viewWillAppear() override;
++  void disconnect() { m_link.disconnect(); }
++  // Called by the app's timer while Escher runs (start screen only).
++  void tick();
++
++  // Accessors for ChatView.
++  Screen screen() const { return m_screen; }
++  const char* message() const { return m_message; }
++  const char* status() const { return m_status; }
++  int conversationCount() const { return m_conversationCount; }
++  const ConversationEntry& conversation(int i) const { return m_conversations[i]; }
++  int selection() const { return m_selection; }
++  int firstVisible() const { return m_firstVisible; }
++  const char* openName() const { return m_openName; }
++  int messageCount() const { return m_messageCount; }
++  // 0 is the oldest message kept.
++  const ChatMessage& messageAt(int i) const {
++    return m_messages[(m_messageStart + i) % k_maxMessages];
++  }
++  int scrollLines() const { return m_scrollLines; }
++  bool hasUnseenBelow() const { return m_unseenBelow; }
++  const TextInput& input() const { return m_input; }
++  bool isSending() const { return m_sending; }
++  bool historyLoaded() const { return m_historyLoaded; }
++  // 14x14 picture of an emoji slot, or nullptr if not received yet.
++  const KDColor* emoji(int slot) const {
++    return slot >= 0 && slot < Protocol::k_emojiSlots && (m_emojiValid >> slot & 1)
++               ? m_emojis[slot]
++               : nullptr;
++  }
++  // Message whose snap OK would open (-1: none), chosen by the view.
++  int viewTarget() const { return m_viewTarget; }
++  void setViewTarget(int index) const { m_viewTarget = index; }
++
++ private:
++  void showStart();
++  void showMessage(const char* message, bool needsKey);
++  void redraw(KDRect rect);
++  void redrawAll();
++  void updateModifierIndicator();
++  bool ensureConnected();
++  void runSession();
++  // Return false when the session must end (link lost, Back, Home).
++  bool browseList();
++  bool runConversation(int index);
++  bool pollFrames(bool inConversation, bool* linkLost);
++  void handleConversationFrame(const uint8_t* payload, uint16_t length);
++  void handleMessageFrame(const uint8_t* payload, uint16_t length);
++  void moveSelection(int delta);
++  void scroll(int delta);
++  bool sendInput();
++  bool runViewer(int index);
++  void handleEmojiFrame(const uint8_t* payload, uint16_t length);
++  void handleMediaRows(const uint8_t* payload, uint16_t length);
++  bool requestList();
++  bool linkAlive();
++
++  ChatView m_view;
++  Numtube::Link m_link;
++  TextInput m_input;
++  Screen m_screen;
++  char m_message[100];
++  char m_status[64];
++  ConversationEntry m_conversations[k_maxConversations];
++  int m_conversationCount;
++  int m_pendingCount;
++  int m_selection;
++  int m_firstVisible;
++  char m_openId[40];
++  char m_openName[32];
++  ChatMessage m_messages[k_maxMessages];
++  int m_messageStart;
++  int m_messageCount;
++  int m_scrollLines;
++  bool m_unseenBelow;
++  bool m_sending;
++  bool m_historyLoaded;
++  bool m_messageNeedsKey;
++  bool m_autoStart;
++  uint64_t m_lastFrameTime;
++  uint64_t m_lastPingTime;
++  uint64_t m_sendStartTime;
++  // Viewer
++  bool m_viewing;
++  bool m_viewStillViewable;
++  int m_mediaWidth;
++  int m_mediaHeight;
++  uint64_t m_viewStartTime;
++  mutable int m_viewTarget;
++  uint32_t m_emojiValid;
++  KDColor m_emojis[Protocol::k_emojiSlots][Protocol::k_emojiSize * Protocol::k_emojiSize];
++};
++
++}  // namespace Numchat
+diff --git a/epsilon/apps/numchat/chat_view.cpp b/epsilon/apps/numchat/chat_view.cpp
+new file mode 100644
+index 0000000000..d7a58987f9
+--- /dev/null
++++ b/epsilon/apps/numchat/chat_view.cpp
+@@ -0,0 +1,428 @@
++#include "chat_view.h"
++
++#include <string.h>
++
++#include "chat_controller.h"
++#include "protocol.h"
++
++namespace Numchat {
++
++namespace {
++
++constexpr KDColor k_background = KDColor::RGB24(0x101010);
++constexpr KDColor k_header = KDColor::RGB24(0x1E1E1E);
++constexpr KDColor k_selected = KDColor::RGB24(0x2E2C10);
++constexpr KDColor k_field = KDColor::RGB24(0x262626);
++constexpr KDColor k_text = KDColorWhite;
++constexpr KDColor k_muted = KDColor::RGB24(0x9A9A9A);
++constexpr KDColor k_accent = KDColor::RGB24(0xFFFC00);
++constexpr KDColor k_mine = KDColor::RGB24(0xF23C57);
++constexpr KDColor k_theirs = KDColor::RGB24(0x0EADFF);
++
++constexpr int k_largeWidth = KDFont::GlyphMaxWidth(KDFont::Size::Large);
++constexpr int k_largeHeight = KDFont::GlyphHeight(KDFont::Size::Large);
++
++bool isCombining(uint8_t byte) { return byte == 0xCC || byte == 0xCD; }
++
++// Emoji slot referenced at p (U+E000 + slot, UTF-8 EE 80 80+slot), or -1.
++int emojiSlot(const char* p) {
++  const uint8_t* b = reinterpret_cast<const uint8_t*>(p);
++  if (b[0] == 0xEE && b[1] == 0x80 && b[2] >= 0x80 &&
++      b[2] < 0x80 + Protocol::k_emojiSlots) {
++    return b[2] - 0x80;
++  }
++  return -1;
++}
++
++// Screen columns taken by the glyph at p: emojis are two glyphs wide.
++int columnsOf(const char* p) { return emojiSlot(p) >= 0 ? 2 : 1; }
++
++// Set by drawRect: where emoji pictures come from.
++const ChatController* s_controller = nullptr;
++
++// Advances past one glyph: its bytes and any combining accents after it.
++const char* nextGlyph(const char* p) {
++  p++;
++  while ((static_cast<uint8_t>(*p) & 0xC0) == 0x80 ||
++         isCombining(static_cast<uint8_t>(*p))) {
++    p++;
++  }
++  return p;
++}
++
++// Screen columns taken by `length` bytes of text.
++int glyphs(const char* text, int length) {
++  int count = 0;
++  for (const char* p = text; p < text + length && *p != '\0'; p = nextGlyph(p)) {
++    count += columnsOf(p);
++  }
++  return count;
++}
++
++KDPoint drawRun(KDContext* ctx, const char* text, int length, KDPoint p,
++                KDGlyph::Style style) {
++  char line[256];
++  if (length <= 0) {
++    return p;
++  }
++  if (length > static_cast<int>(sizeof(line)) - 1) {
++    length = sizeof(line) - 1;
++  }
++  memcpy(line, text, length);
++  line[length] = '\0';
++  return ctx->drawString(line, p, style);
++}
++
++/* Draws `length` bytes of `text`, emojis as pictures (drawString needs a
++ * terminated string, and knows nothing about the emoji references). */
++KDPoint drawPart(KDContext* ctx, const char* text, int length, KDPoint p,
++                 KDGlyph::Style style) {
++  const char* end = text + length;
++  const char* run = text;
++  const char* c = text;
++  while (c < end && *c != '\0') {
++    const int slot = emojiSlot(c);
++    if (slot < 0) {
++      c = nextGlyph(c);
++      continue;
++    }
++    p = drawRun(ctx, run, static_cast<int>(c - run), p, style);
++    constexpr int size = Protocol::k_emojiSize;
++    const int width = 2 * KDFont::GlyphMaxWidth(style.font);
++    const KDColor* pixels = s_controller ? s_controller->emoji(slot) : nullptr;
++    const KDRect box(p.x() + (width - size) / 2, p.y(), size, size);
++    if (pixels != nullptr && style.backgroundColor == k_background) {
++      KDColor buffer[size * size];
++      ctx->fillRectWithPixels(box, pixels, buffer);
++    } else {
++      ctx->fillRect(box, style.backgroundColor);
++      ctx->strokeRect(box, k_muted);
++    }
++    p = KDPoint(p.x() + width, p.y());
++    c = nextGlyph(c);
++    run = c;
++  }
++  return drawRun(ctx, run, static_cast<int>(c - run), p, style);
++}
++
++}  // namespace
++
++int ChatView::lineLength(const char* text, int columns, const char** next) {
++  const char* p = text;
++  const char* lastSpace = nullptr;
++  int count = 0;
++  while (*p != '\0' && *p != '\n') {
++    const int width = columnsOf(p);
++    if (count + width > columns) {
++      break;
++    }
++    if (*p == ' ') {
++      lastSpace = p;
++    }
++    p = nextGlyph(p);
++    count += width;
++  }
++  if (p == text && *p != '\0' && *p != '\n') {
++    p = nextGlyph(p);  // always make progress
++  }
++  const char* end = p;
++  if (*p != '\0' && *p != '\n' && *p != ' ' && lastSpace != nullptr) {
++    end = lastSpace;  // word wrap
++  }
++  const char* following = end;
++  while (*following == ' ') {
++    following++;
++  }
++  if (*following == '\n') {
++    following++;
++  }
++  *next = following;
++  return static_cast<int>(end - text);
++}
++
++bool ChatView::showsSenderName(int index) const {
++  const ChatController::ChatMessage& m = m_controller->messageAt(index);
++  if (m.flags & (Protocol::k_mine | Protocol::k_info) || m.sender[0] == '\0') {
++    return false;
++  }
++  if (index == 0) {
++    return true;
++  }
++  const ChatController::ChatMessage& previous = m_controller->messageAt(index - 1);
++  return (previous.flags & (Protocol::k_mine | Protocol::k_info)) ||
++         strcmp(previous.sender, m.sender) != 0;
++}
++
++int ChatView::linesForMessage(int index) const {
++  const ChatController::ChatMessage& m = m_controller->messageAt(index);
++  const int columns = (m.flags & Protocol::k_info) ? k_infoColumns : k_bubbleColumns;
++  int lines = showsSenderName(index) ? 1 : 0;
++  const char* p = m.text;
++  do {
++    lineLength(p, columns, &p);
++    lines++;
++  } while (*p != '\0');
++  return lines;
++}
++
++int ChatView::totalLines() const {
++  int total = 0;
++  for (int i = 0; i < m_controller->messageCount(); i++) {
++    total += linesForMessage(i);
++  }
++  return total;
++}
++
++void ChatView::drawCentered(KDContext* ctx, const char* text, int y,
++                            KDColor color, KDFont::Size font) const {
++  const int width = KDFont::GlyphMaxWidth(font);
++  const int height = KDFont::GlyphHeight(font);
++  const KDGlyph::Style style{color, k_background, font};
++  const char* p = text;
++  while (*p != '\0') {
++    const char* next;
++    const int length = lineLength(p, k_width / width - 2, &next);
++    const int x = (k_width - glyphs(p, length) * width) / 2;
++    drawPart(ctx, p, length, KDPoint(x, y), style);
++    y += height + 2;
++    if (next == p) {
++      break;
++    }
++    p = next;
++  }
++}
++
++void ChatView::drawRect(KDContext* ctx, KDRect rect) const {
++  s_controller = m_controller;
++  switch (m_controller->screen()) {
++    case ChatController::Screen::Start:
++    case ChatController::Screen::Message:
++      drawStartOrMessage(ctx);
++      break;
++    case ChatController::Screen::List:
++      drawList(ctx);
++      break;
++    case ChatController::Screen::Conversation:
++      drawConversation(ctx);
++      break;
++  }
++}
++
++void ChatView::drawStartOrMessage(KDContext* ctx) const {
++  ctx->fillRect(bounds(), k_background);
++  drawCentered(ctx, "NumChat", 30, k_accent, KDFont::Size::Large);
++  if (m_controller->screen() == ChatController::Screen::Message) {
++    drawCentered(ctx, m_controller->message(), 80, k_text, KDFont::Size::Small);
++    return;
++  }
++  drawCentered(ctx,
++               "Laisse l'appli NumTube ouverte sur le Mac, avec Snapchat "
++               "connecte dans sa fenetre Chrome.",
++               80, k_text, KDFont::Size::Small);
++  drawCentered(ctx, "OK : se connecter", 150, k_accent, KDFont::Size::Small);
++  drawCentered(ctx, "Accents : Ans apres la lettre", 180, k_muted,
++               KDFont::Size::Small);
++}
++
++void ChatView::drawList(KDContext* ctx) const {
++  ctx->fillRect(headerRect(), k_header);
++  ctx->drawString("NumChat", KDPoint(8, 2), {k_accent, k_header, KDFont::Size::Large});
++  const char* status = m_controller->status();
++  if (status[0] != '\0') {
++    const char* next;
++    const int length = lineLength(status, 30, &next);
++    drawPart(ctx, status, length,
++             KDPoint(k_width - 6 - glyphs(status, length) * k_glyphWidth, 4),
++             {k_muted, k_header, KDFont::Size::Small});
++  }
++  const KDRect body(0, k_headerHeight, k_width, k_height - k_headerHeight);
++  ctx->fillRect(body, k_background);
++  const int count = m_controller->conversationCount();
++  if (count == 0) {
++    drawCentered(ctx, "Chargement des conversations...", 100, k_muted,
++                 KDFont::Size::Small);
++    return;
++  }
++  for (int row = 0; row < k_visibleRows; row++) {
++    const int index = m_controller->firstVisible() + row;
++    if (index >= count) {
++      break;
++    }
++    const ChatController::ConversationEntry& c = m_controller->conversation(index);
++    const bool selected = index == m_controller->selection();
++    const KDColor background = selected ? k_selected : k_background;
++    const int y = k_headerHeight + row * k_rowHeight;
++    ctx->fillRect(KDRect(0, y, k_width, k_rowHeight), background);
++    const bool unread = c.flags & Protocol::k_unread;
++    if (unread) {
++      ctx->fillRect(KDRect(6, y + 8, 6, 6), k_accent);
++    }
++    const char* next;
++    drawPart(ctx, c.name, lineLength(c.name, 28, &next), KDPoint(18, y + 2),
++             {unread ? k_accent : k_text, background, KDFont::Size::Large});
++    drawPart(ctx, c.preview, lineLength(c.preview, 42, &next),
++             KDPoint(18, y + 3 + k_largeHeight),
++             {k_muted, background, KDFont::Size::Small});
++    ctx->fillRect(KDRect(0, y + k_rowHeight - 1, k_width, 1), k_header);
++  }
++}
++
++void ChatView::drawConversation(KDContext* ctx) const {
++  // Header
++  ctx->fillRect(headerRect(), k_header);
++  const char* next;
++  const char* name = m_controller->openName();
++  drawPart(ctx, name, lineLength(name, 14, &next), KDPoint(8, 2),
++           {k_text, k_header, KDFont::Size::Large});
++  const char* status = m_controller->status();
++  if (status[0] != '\0') {
++    const int length = lineLength(status, 22, &next);
++    drawPart(ctx, status, length,
++             KDPoint(k_width - 6 - glyphs(status, length) * k_glyphWidth, 4),
++             {k_muted, k_header, KDFont::Size::Small});
++  }
++
++  // Messages, bottom-aligned, scrolled up by scrollLines().
++  const KDRect area = messagesRect();
++  ctx->fillRect(area, k_background);
++  if (!m_controller->historyLoaded() && m_controller->messageCount() == 0) {
++    drawCentered(ctx, "Chargement...", area.y() + 60, k_muted, KDFont::Size::Small);
++  } else {
++    const int total = totalLines();
++    int bottom = total - m_controller->scrollLines();
++    int top = bottom - k_visibleLines;
++    // Few messages: stick them to the bottom of the area.
++    int y = k_messagesTop + (top < 0 ? -top * k_lineHeight : 0);
++    if (top < 0) {
++      top = 0;
++    }
++    int line = 0;
++    int viewTarget = -1;
++    for (int i = 0; i < m_controller->messageCount() && line < bottom; i++) {
++      const ChatController::ChatMessage& m = m_controller->messageAt(i);
++      const bool mine = m.flags & Protocol::k_mine;
++      const bool info = m.flags & Protocol::k_info;
++      const int span = linesForMessage(i);
++      if (line + span <= top) {
++        line += span;
++        continue;
++      }
++      if (showsSenderName(i)) {
++        if (line >= top) {
++          drawPart(ctx, m.sender, lineLength(m.sender, 30, &next),
++                   KDPoint(8, y), {k_theirs, k_background, KDFont::Size::Small});
++          y += k_lineHeight;
++        }
++        line++;
++      }
++      const int columns = info ? k_infoColumns : k_bubbleColumns;
++      const bool viewable = m.flags & Protocol::k_viewable;
++      if (viewable && line + span > top) {
++        viewTarget = i;  // the lowest one on screen wins
++      }
++      const KDColor color = viewable ? k_accent
++                            : info || (m.flags & Protocol::k_media) ? k_muted
++                                                                     : k_text;
++      const char* p = m.text;
++      do {
++        const int length = lineLength(p, columns, &next);
++        if (line >= top && line < bottom) {
++          const int width = glyphs(p, length) * k_glyphWidth;
++          int x;
++          if (info) {
++            x = (k_width - width) / 2;
++          } else if (mine) {
++            x = k_width - 12 - width;
++            ctx->fillRect(KDRect(k_width - 6, y, 2, k_lineHeight), k_mine);
++          } else {
++            x = 12;
++            ctx->fillRect(KDRect(4, y, 2, k_lineHeight), k_theirs);
++          }
++          const KDPoint end = drawPart(ctx, p, length, KDPoint(x, y),
++                                       {color, k_background, KDFont::Size::Small});
++          if (viewable && !mine) {
++            ctx->drawString(" OK : voir", end, {k_muted, k_background, KDFont::Size::Small});
++          }
++          y += k_lineHeight;
++        }
++        line++;
++        if (next == p) {
++          break;
++        }
++        p = next;
++      } while (*p != '\0');
++    }
++    m_controller->setViewTarget(viewTarget);
++    if (m_controller->hasUnseenBelow()) {
++      const char* hint = " Nouveaux messages - bas ";
++      const int width = glyphs(hint, strlen(hint)) * k_glyphWidth;
++      drawPart(ctx, hint, strlen(hint),
++               KDPoint((k_width - width) / 2, area.bottom() - k_lineHeight),
++               {KDColorBlack, k_accent, KDFont::Size::Small});
++    }
++  }
++  drawInput(ctx);
++}
++
++void ChatView::drawInput(KDContext* ctx) const {
++  const KDRect rect = inputRect();
++  ctx->fillRect(rect, k_background);
++  ctx->fillRect(KDRect(rect.x(), rect.y(), rect.width(), 1), k_header);
++  const KDRect field(4, rect.y() + 5, k_width - 8, rect.height() - 9);
++  ctx->fillRect(field, k_field);
++
++  const TextInput& input = m_controller->input();
++  // Mode indicator, like Epsilon's status bar.
++  const Ion::Events::ShiftAlphaStatus mods = input.modifiers();
++  const char* mode = "123";
++  if (mods.alphaIsActive()) {
++    const bool upper = mods.shiftIsActive();
++    mode = mods.alphaIsLocked() ? (upper ? "ABC" : "abc") : (upper ? "A" : "a");
++  } else if (mods.shiftIsActive()) {
++    mode = "shift";
++  }
++  const int modeWidth = static_cast<int>(strlen(mode)) * k_glyphWidth;
++  ctx->drawString(mode, KDPoint(field.right() - 4 - modeWidth, field.y() + 3),
++                  {k_accent, k_field, KDFont::Size::Small});
++
++  const KDGlyph::Style style{m_controller->isSending() ? k_muted : k_text, k_field,
++                             KDFont::Size::Small};
++  const int x = field.x() + 4;
++  const int y = field.y() + 3;
++  if (input.isEmpty()) {
++    const char* hint = m_controller->isSending() ? "Envoi..." : "Ecris un message, EXE envoie";
++    ctx->drawString(hint, KDPoint(x, y), {k_muted, k_field, KDFont::Size::Small});
++    ctx->fillRect(KDRect(x, y, 1, k_glyphHeight), k_text);
++    return;
++  }
++  /* Show the end of the text on two lines, cut by glyph count (typing is
++   * easier to follow without word wrap). */
++  const char* start = input.text();
++  const int total = glyphs(start, input.length());
++  const int rows = total / k_inputColumns + 1;  // the cursor needs room too
++  int skip = (rows > 2 ? rows - 2 : 0) * k_inputColumns;
++  while (skip-- > 0 && *start != '\0') {
++    start = nextGlyph(start);
++  }
++  KDPoint cursor(x, y);
++  for (int row = 0; row < 2; row++) {
++    const char* p = start;
++    int count = 0;
++    while (count < k_inputColumns && *p != '\0') {
++      p = nextGlyph(p);
++      count++;
++    }
++    const int rowY = y + row * k_lineHeight;
++    drawPart(ctx, start, static_cast<int>(p - start), KDPoint(x, rowY), style);
++    if (count < k_inputColumns) {
++      cursor = KDPoint(x + count * k_glyphWidth, rowY);
++      break;
++    }
++    start = p;
++  }
++  if (!m_controller->isSending()) {
++    ctx->fillRect(KDRect(cursor.x(), cursor.y(), 1, k_glyphHeight), k_text);
++  }
++}
++
++}  // namespace Numchat
+diff --git a/epsilon/apps/numchat/chat_view.h b/epsilon/apps/numchat/chat_view.h
+new file mode 100644
+index 0000000000..d9d90cfdbd
+--- /dev/null
++++ b/epsilon/apps/numchat/chat_view.h
+@@ -0,0 +1,63 @@
++#pragma once
++
++#include <escher/view.h>
++#include <kandinsky/font.h>
++
++namespace Numchat {
++
++class ChatController;
++
++class ChatView : public Escher::View {
++ public:
++  explicit ChatView(const ChatController* controller) : m_controller(controller) {}
++  void drawRect(KDContext* ctx, KDRect rect) const override;
++  void redrawAll() { markRectAsDirty(bounds()); }
++  void redrawRect(KDRect rect) { markRectAsDirty(rect); }
++
++  // Layout, shared with the controller (which redraws only what changed).
++  static constexpr int k_width = 320;
++  static constexpr int k_height = 222;  // below Epsilon's title bar
++  static constexpr int k_headerHeight = 22;
++  static constexpr int k_glyphWidth = KDFont::GlyphMaxWidth(KDFont::Size::Small);
++  static constexpr int k_glyphHeight = KDFont::GlyphHeight(KDFont::Size::Small);
++  static constexpr int k_lineHeight = k_glyphHeight + 1;
++  static constexpr int k_inputHeight = 2 * k_lineHeight + 14;
++  static constexpr int k_messagesTop = k_headerHeight + 3;
++  static constexpr int k_visibleLines =
++      (k_height - k_headerHeight - k_inputHeight - 3) / k_lineHeight;
++  static constexpr int k_bubbleColumns = 32;
++  static constexpr int k_infoColumns = 42;
++  static constexpr int k_inputColumns = 40;
++  static constexpr int k_rowHeight = 40;
++  static constexpr int k_visibleRows = (k_height - k_headerHeight) / k_rowHeight;
++
++  static KDRect headerRect() { return KDRect(0, 0, k_width, k_headerHeight); }
++  static KDRect messagesRect() {
++    return KDRect(0, k_headerHeight, k_width,
++                  k_height - k_headerHeight - k_inputHeight);
++  }
++  static KDRect inputRect() {
++    return KDRect(0, k_height - k_inputHeight, k_width, k_inputHeight);
++  }
++
++  /* Byte length of the next line of `text` holding at most `columns` glyphs,
++   * cut after a word when possible. *next receives where the following line
++   * starts (spaces at the cut are skipped). */
++  static int lineLength(const char* text, int columns, const char** next);
++  // Lines taken by message i of the open conversation.
++  int linesForMessage(int index) const;
++  int totalLines() const;
++
++ private:
++  void drawCentered(KDContext* ctx, const char* text, int y, KDColor color,
++                    KDFont::Size font) const;
++  void drawStartOrMessage(KDContext* ctx) const;
++  void drawList(KDContext* ctx) const;
++  void drawConversation(KDContext* ctx) const;
++  void drawInput(KDContext* ctx) const;
++  bool showsSenderName(int index) const;
++
++  const ChatController* m_controller;
++};
++
++}  // namespace Numchat
+diff --git a/epsilon/apps/numchat/i18n/base.de.i18n b/epsilon/apps/numchat/i18n/base.de.i18n
+new file mode 100644
+index 0000000000..0c4be903d6
+--- /dev/null
++++ b/epsilon/apps/numchat/i18n/base.de.i18n
+@@ -0,0 +1 @@
++# NumChat has no translated strings; see base.universal.i18n.
+diff --git a/epsilon/apps/numchat/i18n/base.en.i18n b/epsilon/apps/numchat/i18n/base.en.i18n
+new file mode 100644
+index 0000000000..0c4be903d6
+--- /dev/null
++++ b/epsilon/apps/numchat/i18n/base.en.i18n
+@@ -0,0 +1 @@
++# NumChat has no translated strings; see base.universal.i18n.
+diff --git a/epsilon/apps/numchat/i18n/base.es.i18n b/epsilon/apps/numchat/i18n/base.es.i18n
+new file mode 100644
+index 0000000000..0c4be903d6
+--- /dev/null
++++ b/epsilon/apps/numchat/i18n/base.es.i18n
+@@ -0,0 +1 @@
++# NumChat has no translated strings; see base.universal.i18n.
+diff --git a/epsilon/apps/numchat/i18n/base.fr.i18n b/epsilon/apps/numchat/i18n/base.fr.i18n
+new file mode 100644
+index 0000000000..0c4be903d6
+--- /dev/null
++++ b/epsilon/apps/numchat/i18n/base.fr.i18n
+@@ -0,0 +1 @@
++# NumChat has no translated strings; see base.universal.i18n.
+diff --git a/epsilon/apps/numchat/i18n/base.it.i18n b/epsilon/apps/numchat/i18n/base.it.i18n
+new file mode 100644
+index 0000000000..0c4be903d6
+--- /dev/null
++++ b/epsilon/apps/numchat/i18n/base.it.i18n
+@@ -0,0 +1 @@
++# NumChat has no translated strings; see base.universal.i18n.
+diff --git a/epsilon/apps/numchat/i18n/base.nl.i18n b/epsilon/apps/numchat/i18n/base.nl.i18n
+new file mode 100644
+index 0000000000..0c4be903d6
+--- /dev/null
++++ b/epsilon/apps/numchat/i18n/base.nl.i18n
+@@ -0,0 +1 @@
++# NumChat has no translated strings; see base.universal.i18n.
+diff --git a/epsilon/apps/numchat/i18n/base.pt.i18n b/epsilon/apps/numchat/i18n/base.pt.i18n
+new file mode 100644
+index 0000000000..0c4be903d6
+--- /dev/null
++++ b/epsilon/apps/numchat/i18n/base.pt.i18n
+@@ -0,0 +1 @@
++# NumChat has no translated strings; see base.universal.i18n.
+diff --git a/epsilon/apps/numchat/i18n/base.universal.i18n b/epsilon/apps/numchat/i18n/base.universal.i18n
+new file mode 100644
+index 0000000000..1da4293988
+--- /dev/null
++++ b/epsilon/apps/numchat/i18n/base.universal.i18n
+@@ -0,0 +1,2 @@
++NumchatApp = "NumChat"
++NumchatAppCapital = "NUMCHAT"
+diff --git a/epsilon/apps/numchat/numchat_icon.png b/epsilon/apps/numchat/numchat_icon.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..034c420c6f3b39db271108c8eb53c89ad4575fbb
+GIT binary patch
+literal 439
+zcmV;o0Z9IdP)<h;3K|Lk000e1NJLTq001`t001}$1^@s6S&d+m0004gNkl<Zc%1E;
+zYidLx426^65-N26t1H+g6s8Q+Vx6n?5nqRU{>`0W@^Lhx$du9JiypMO*bpcGI~A$~
+zQV_sWbqfMms(wKMyW$WeFfY&ZvgVM)Xs(5Vc1{RbLckINmgyb9zQ55(xsT8J-O>(*
+z(tzYzxERVgSDmyfpS8`9Tmu(^jfToWx<bIFhB6zhHK)|NwgSw{=eC9G9eOK}Q(S9t
+zPY75-z%oNxbz=Hz#Y}ZB-e}|BnlV%1Y@&ehyH-rCgn%UkEa@E}wdlj|S}{wUb5Q|T
+z1!=`B*$P}iAzCq|y4T#Pl9C{QIPBe2HRNk>1qar9TJGXrjcd)$tpIGv$-TE<qucqk
+z+ppG}Fb$_$?k!DkGRPZe5BA@ov!}RTnGu6N!B#>I+vj!xQ-|9LOcic7u&y=do5>E1
+zV@N~U(Ji%Uxii>P_dAqRCAr6#CyNa+{$Z8D+~XgfU*}K&IpFv+El&sJsQ#BVcPb!X
+h)SU%6;Vov)jBnQL&IkABdKmx!002ovPDHLkV1kAg$$$U=
+
+literal 0
+HcmV?d00001
+
+diff --git a/epsilon/apps/numchat/protocol.h b/epsilon/apps/numchat/protocol.h
+new file mode 100644
+index 0000000000..344b01cac0
+--- /dev/null
++++ b/epsilon/apps/numchat/protocol.h
+@@ -0,0 +1,58 @@
++#pragma once
++
++#include <stdint.h>
++
++/* Frame types carried in TMIA frames between the calculator and the gateway.
++ * Keep in sync with gateway/numchat_service.py. Hello/HelloAck/Log are shared
++ * with NumTube (see apps/numtube/protocol.h).
++ *
++ * Strings marked str8 are a length byte followed by UTF-8 bytes. Accents travel
++ * decomposed (NFD): a base letter then a combining accent (0xCC/0xCD lead). */
++namespace Numchat {
++namespace Protocol {
++
++enum Type : uint8_t {
++  Hello = 0x0A,
++  HelloAck = 0x0B,
++  Log = 0x4B,
++  List = 0x60,          // PC <- calc: send me the conversation list
++  Conversation = 0x61,  // PC -> calc: u8 index, u8 flags, str8 id, str8 name,
++                        //             str8 preview. Index 0 starts a new list.
++  ListDone = 0x62,      // PC -> calc: u8 count
++  Open = 0x63,          // PC <- calc: conversation id
++  Message = 0x64,       // PC -> calc: u8 flags, str8 sender, text (rest)
++  OpenDone = 0x65,      // PC -> calc: history sent, live messages follow
++  Send = 0x66,          // PC <- calc: UTF-8 text typed on the calculator
++  SendResult = 0x67,    // PC -> calc: u8 ok, error text (rest)
++  Close = 0x68,         // PC <- calc: left the conversation
++  Status = 0x69,        // PC -> calc: UTF-8 notice, empty to clear
++  Ping = 0x6A,          // PC <- calc: are you there? (answered by Pong)
++  Pong = 0x6B,          // PC -> calc
++  Emoji = 0x6C,         // PC -> calc: u8 slot, u8 w, u8 h, RGB565 pixels
++  View = 0x6D,          // PC <- calc: u8 media id (show this snap)
++  MediaStart = 0x6E,    // PC -> calc: u16 w, u16 h
++  MediaRows = 0x6F,     // PC -> calc: u16 frame, u16 y, u8 rows, u8 last,
++                        //             RGB565 pixels
++  MediaEnd = 0x70,      // PC -> calc: u8 still viewable, reason text
++  MediaAck = 0x71,      // PC <- calc: u16 frame, once fully drawn
++  ViewStop = 0x72,      // PC <- calc: Back pressed in the viewer
++};
++
++// Conversation flags
++constexpr uint8_t k_unread = 1;
++
++// Message flags
++constexpr uint8_t k_mine = 1;     // sent by the calculator's owner
++constexpr uint8_t k_info = 2;     // notice from Snapchat (screenshot, ...)
++constexpr uint8_t k_media = 4;    // text is a label such as "photo"
++constexpr uint8_t k_history = 8;  // part of the history sent on Open
++// A snap/photo that can be shown: a u8 media id follows the sender.
++constexpr uint8_t k_viewable = 16;
++
++/* Emojis travel as private-use characters U+E000 + slot (UTF-8 EE 80 80+slot)
++ * whose 14x14 picture came earlier in an Emoji frame. */
++constexpr int k_emojiSlots = 32;
++constexpr int k_emojiSize = 14;
++
++}  // namespace Protocol
++}  // namespace Numchat
+diff --git a/epsilon/apps/numchat/text_input.cpp b/epsilon/apps/numchat/text_input.cpp
+new file mode 100644
+index 0000000000..267949f352
+--- /dev/null
++++ b/epsilon/apps/numchat/text_input.cpp
+@@ -0,0 +1,203 @@
++#include "text_input.h"
++
++#include <string.h>
++
++namespace Numchat {
++
++namespace {
++
++using Ion::Keyboard::Key;
++using Status = Ion::Events::ShiftAlphaStatus;
++
++bool isCombiningLead(uint8_t byte) { return byte == 0xCC || byte == 0xCD; }
++
++// Second byte of the UTF-8 encoding of the combining accents (all 0xCC xx).
++constexpr uint8_t k_grave = 0x80;       // U+0300
++constexpr uint8_t k_acute = 0x81;       // U+0301
++constexpr uint8_t k_circumflex = 0x82;  // U+0302
++constexpr uint8_t k_tilde = 0x83;       // U+0303
++constexpr uint8_t k_diaeresis = 0x88;   // U+0308
++constexpr uint8_t k_cedilla = 0xA7;     // U+0327
++
++// Accents each letter can take, in the order Ans cycles through them.
++const uint8_t* accentsFor(char letter) {
++  static constexpr uint8_t a[] = {k_grave, k_circumflex, k_diaeresis, 0};
++  static constexpr uint8_t e[] = {k_acute, k_grave, k_circumflex, k_diaeresis, 0};
++  static constexpr uint8_t i[] = {k_circumflex, k_diaeresis, 0};
++  static constexpr uint8_t o[] = {k_circumflex, k_diaeresis, 0};
++  static constexpr uint8_t u[] = {k_grave, k_circumflex, k_diaeresis, 0};
++  static constexpr uint8_t c[] = {k_cedilla, 0};
++  static constexpr uint8_t n[] = {k_tilde, 0};
++  static constexpr uint8_t y[] = {k_diaeresis, 0};
++  switch (letter | 0x20) {  // lower case
++    case 'a': return a;
++    case 'e': return e;
++    case 'i': return i;
++    case 'o': return o;
++    case 'u': return u;
++    case 'c': return c;
++    case 'n': return n;
++    case 'y': return y;
++    default: return nullptr;
++  }
++}
++
++}  // namespace
++
++TextInput::TextInput() : m_length(0) {
++  m_text[0] = '\0';
++  resetModifiers();
++}
++
++void TextInput::clear() {
++  m_length = 0;
++  m_text[0] = '\0';
++}
++
++void TextInput::resetModifiers() {
++  m_modifiers = Status(Status::ShiftStatus::Inactive, Status::AlphaStatus::Locked);
++}
++
++int TextInput::glyphCount(const char* text, size_t length) {
++  int glyphs = 0;
++  for (size_t i = 0; i < length; i++) {
++    const uint8_t byte = static_cast<uint8_t>(text[i]);
++    if ((byte & 0xC0) == 0x80) {
++      continue;  // continuation byte
++    }
++    if (isCombiningLead(byte)) {
++      continue;
++    }
++    glyphs++;
++  }
++  return glyphs;
++}
++
++bool TextInput::insert(const char* bytes, size_t length) {
++  if (m_length + length > k_capacity) {
++    return false;
++  }
++  memcpy(m_text + m_length, bytes, length);
++  m_length += length;
++  m_text[m_length] = '\0';
++  return true;
++}
++
++void TextInput::eraseLastGlyph() {
++  // Drop trailing combining accents together with their base letter.
++  while (m_length > 0) {
++    size_t start = m_length - 1;
++    while (start > 0 && (static_cast<uint8_t>(m_text[start]) & 0xC0) == 0x80) {
++      start--;
++    }
++    const bool combining = isCombiningLead(static_cast<uint8_t>(m_text[start]));
++    m_length = start;
++    if (!combining) {
++      break;
++    }
++  }
++  m_text[m_length] = '\0';
++}
++
++bool TextInput::cycleAccent() {
++  // The text ends with a letter, optionally followed by one accent (2 bytes).
++  size_t base = m_length;
++  uint8_t current = 0;
++  if (m_length >= 3 && static_cast<uint8_t>(m_text[m_length - 2]) == 0xCC) {
++    current = static_cast<uint8_t>(m_text[m_length - 1]);
++    base = m_length - 2;
++  }
++  if (base == 0) {
++    return false;
++  }
++  const uint8_t* accents = accentsFor(m_text[base - 1]);
++  if (accents == nullptr) {
++    return false;
++  }
++  uint8_t next = accents[0];
++  if (current != 0) {
++    int index = 0;
++    while (accents[index] != 0 && accents[index] != current) {
++      index++;
++    }
++    next = accents[index] == 0 ? accents[0] : accents[index + 1];
++  }
++  m_length = base;
++  m_text[m_length] = '\0';
++  if (next != 0) {
++    const char accent[2] = {static_cast<char>(0xCC), static_cast<char>(next)};
++    insert(accent, 2);
++  }
++  return true;
++}
++
++TextInput::Result TextInput::handleKey(Key key) {
++  if (key == Key::Shift) {
++    m_modifiers.toggleShift();
++    return Result::Modifier;
++  }
++  if (key == Key::Alpha) {
++    m_modifiers.cycleAlpha();
++    return Result::Modifier;
++  }
++  if (key == Key::Backspace) {
++    /* Shift+Backspace clears everything, but not with caps lock (shift under
++     * locked alpha), where it would wipe the text by surprise. */
++    if (m_modifiers.shiftIsActive() && !m_modifiers.alphaIsActive()) {
++      clear();
++      m_modifiers.removeShift();
++    } else {
++      eraseLastGlyph();
++    }
++    return Result::Changed;
++  }
++  if (key == Key::Ans) {
++    return cycleAccent() ? Result::Changed : Result::Ignored;
++  }
++  if (key == Key::EE) {
++    insert("'", 1);
++    return Result::Changed;
++  }
++
++  /* Same mapping as Ion::Events::Event(key, shift, alpha, lock), which only
++   * exists in the kernel: try the most specific layer, fall back to the
++   * plainer ones (shift-alpha -> alpha -> plain, shift -> plain). */
++  using Event = Ion::Events::Event;
++  const bool shift = m_modifiers.shiftIsActive();
++  const bool alpha = m_modifiers.alphaIsActive();
++  int offsets[3];
++  int count = 0;
++  if (shift && alpha) {
++    offsets[count++] = Event::k_shiftAlphaEventsOffset;
++  }
++  if (alpha) {
++    offsets[count++] = Event::k_alphaEventsOffset;
++  } else if (shift) {
++    offsets[count++] = Event::k_shiftEventsOffset;
++  }
++  offsets[count++] = Event::k_plainEventsOffset;
++  uint8_t eventId = static_cast<uint8_t>(key);
++  for (int i = 0; i < count; i++) {
++    eventId = static_cast<uint8_t>(offsets[i] + static_cast<int>(key));
++    if (Ion::Events::isDefined(eventId)) {
++      break;
++    }
++  }
++  char text[8];
++  const size_t size = Ion::Events::copyText(eventId, text, sizeof(text));
++  /* Only single characters: plain keys also produce math snippets such as
++   * "e^(" or "log(" that make no sense in a chat. */
++  if (size == 0 || TextInput::glyphCount(text, strlen(text)) != 1 ||
++      static_cast<uint8_t>(text[0]) < 0x20) {
++    return Result::Ignored;
++  }
++  const bool inserted = insert(text, strlen(text));
++  // One-shot modifiers end with the character they applied to.
++  if (!m_modifiers.alphaIsLocked()) {
++    m_modifiers.removeShift();
++    m_modifiers.removeAlpha();
++  }
++  return inserted ? Result::Changed : Result::Ignored;
++}
++
++}  // namespace Numchat
+diff --git a/epsilon/apps/numchat/text_input.h b/epsilon/apps/numchat/text_input.h
+new file mode 100644
+index 0000000000..0a7e268066
+--- /dev/null
++++ b/epsilon/apps/numchat/text_input.h
+@@ -0,0 +1,49 @@
++#pragma once
++
++#include <ion/events.h>
++#include <ion/keyboard.h>
++#include <stddef.h>
++#include <stdint.h>
++
++namespace Numchat {
++
++/* Text entry driven by raw key presses (Ion::Keyboard), for screens that never
++ * return to Escher's event loop. Shift and Alpha follow Epsilon's rules (see
++ * Ion::Events::ModifierState), alpha starts locked since a chat is mostly
++ * letters. Accents are typed by pressing Ans after a letter, which cycles
++ * through the accents that letter can take. The text is kept decomposed
++ * (NFD), the way the calculator fonts draw accents. */
++class TextInput {
++ public:
++  static constexpr size_t k_capacity = 200;  // bytes, without the final 0
++
++  TextInput();
++
++  enum class Result {
++    Ignored,   // not a text key: the caller handles it (arrows, EXE, Back...)
++    Changed,   // the text changed
++    Modifier,  // shift/alpha changed (the indicator needs a redraw)
++  };
++  Result handleKey(Ion::Keyboard::Key key);
++
++  const char* text() const { return m_text; }
++  size_t length() const { return m_length; }
++  bool isEmpty() const { return m_length == 0; }
++  void clear();
++  Ion::Events::ShiftAlphaStatus modifiers() const { return m_modifiers; }
++  void resetModifiers();
++
++  // Number of glyphs (combining accents take no room).
++  static int glyphCount(const char* text, size_t length);
++
++ private:
++  bool insert(const char* bytes, size_t length);
++  void eraseLastGlyph();
++  bool cycleAccent();
++
++  Ion::Events::ShiftAlphaStatus m_modifiers;
++  size_t m_length;
++  char m_text[k_capacity + 1];
++};
++
++}  // namespace Numchat
 diff --git a/epsilon/apps/numtube/Makefile b/epsilon/apps/numtube/Makefile
 new file mode 100644
 index 0000000000..5ec8b4c403

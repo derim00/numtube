@@ -93,6 +93,8 @@ T_CONTROL = 0x48
 T_PLAY_END = 0x49
 T_STATUS = 0x4A
 T_LOG = 0x4B
+# NumChat frames, handled by gateway/numchat_service.py.
+T_CHAT_FIRST, T_CHAT_LAST = 0x60, 0x72
 
 CTRL_STOP = 0
 CTRL_PAUSE = 1
@@ -322,11 +324,16 @@ def _drawable(ch: str) -> bool:
     return 32 <= ord(decomposed[0]) < 127 and all(ord(c) in FONT_COMBINING for c in decomposed[1:])
 
 
-def clean_text(text: str) -> str:
-    """Keeps what the calculator can draw. Returns NFC: one char per glyph."""
+def clean_text(text: str, keep_private: bool = False) -> str:
+    """Keeps what the calculator can draw. Returns NFC: one char per glyph.
+    With keep_private, private-use characters (U+E000-U+F8FF) are kept: NumChat
+    uses them as references to emoji pictures sent separately."""
     text = unicodedata.normalize("NFC", text)
     out = []
     for ch in text:
+        if keep_private and 0xE000 <= ord(ch) <= 0xF8FF:
+            out.append(ch)
+            continue
         ch = TRANSLATE.get(ch, ch)
         if all(_drawable(c) for c in ch):
             out.append(ch)
@@ -918,11 +925,31 @@ class Player(threading.Thread):
 # ---------------------------------------------------------------------------
 # Session: dispatches requests from one connected calculator
 # ---------------------------------------------------------------------------
+_CHAT_SERVICE = None
+_CHAT_LOCK = threading.Lock()
+
+
+def chat_service(opts: argparse.Namespace):
+    """The NumChat service, shared by every calculator connection so that the
+    browser session survives reconnections. Created on first use only: NumTube
+    alone never starts a browser."""
+    global _CHAT_SERVICE
+    with _CHAT_LOCK:
+        if _CHAT_SERVICE is None:
+            import numchat_service as chat
+
+            backend = getattr(opts, "numchat", "snapchat")
+            factory = chat.DemoBackend if backend == "demo" else chat.SnapBackend
+            _CHAT_SERVICE = chat.ChatService(factory, clean_text, truncate_utf8, log)
+        return _CHAT_SERVICE
+
+
 class Session:
     def __init__(self, link: SerialLink, opts: argparse.Namespace) -> None:
         self.link = link
         self.opts = opts
         self.player: Player | None = None
+        self.chat = None
 
     def stop_player(self) -> None:
         if self.player:
@@ -949,6 +976,12 @@ class Session:
         log(f"  {len(entries)} resultats envoyes")
 
     def handle(self, frame_type: int, payload: bytes) -> None:
+        if T_CHAT_FIRST <= frame_type <= T_CHAT_LAST:
+            if self.chat is None:
+                self.chat = chat_service(self.opts)
+                self.chat.attach(self.link)
+            self.chat.handle(self.link, frame_type, payload)
+            return
         if frame_type == T_LOG:
             log("  [calc] " + payload.decode("utf-8", "replace"))
         elif frame_type == T_HELLO:
@@ -996,6 +1029,8 @@ class Session:
                         self.handle(frame_type, payload)
         finally:
             self.stop_player()
+            if self.chat is not None:
+                self.chat.detach(self.link)
 
 
 def serve_usb(opts: argparse.Namespace, status=None) -> None:
@@ -1028,7 +1063,9 @@ def serve_usb(opts: argparse.Namespace, status=None) -> None:
 
 
 def default_options() -> argparse.Namespace:
-    return argparse.Namespace(port=None, tcp=None, fps=15, lang=["fr", "en"])
+    # NUMCHAT=demo in the environment: NumChat talks to a fake messaging app.
+    numchat = "demo" if os.environ.get("NUMCHAT") == "demo" else "snapchat"
+    return argparse.Namespace(port=None, tcp=None, fps=15, lang=["fr", "en"], numchat=numchat)
 
 
 def main() -> int:
@@ -1038,6 +1075,8 @@ def main() -> int:
     ap.add_argument("--tcp", type=int, nargs="?", const=9735, metavar="PORT",
                     help="attend le simulateur NumWorks sur ce port TCP au lieu du cable")
     ap.add_argument("--lang", default="fr,en", help="langues des sous-titres par priorite (defaut: fr,en)")
+    ap.add_argument("--numchat", choices=["snapchat", "demo"], default="snapchat",
+                    help="messagerie de NumChat: Snapchat Web, ou une demo pour tester (defaut: snapchat)")
     opts = ap.parse_args()
     opts.lang = [lang.strip() for lang in opts.lang.split(",") if lang.strip()]
 
