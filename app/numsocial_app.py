@@ -46,6 +46,8 @@ if len(sys.argv) > 1 and sys.argv[1] == "--self-test":
     print("playwright:", subprocess.run([*map(str, driver), "--version"], capture_output=True,
                                         text=True).stdout.strip() or "MISSING")
     import numchat_media, numchat_service, numchat_snap  # noqa: F401  (NumChat loads)
+    import mss, numscreen_input, numscreen_service  # noqa: F401  (NumScreen loads)
+    print("numscreen:", numscreen_input.create("real").name)
     firmware = sorted(os.listdir(os.path.join(here, "firmware")))
     print("firmware:", firmware)
     sys.exit(0 if backend and firmware else 1)
@@ -198,7 +200,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(409, b"", "text/plain")
                 return
             version = str(body.get("version", "")).strip()
-            apps = [str(a) for a in body.get("apps") or ["numtube", "numchat"]]
+            apps = [str(a) for a in body.get("apps") or ["numtube", "numchat", "numscreen"]]
             threading.Thread(target=run_install, args=(version, apps), daemon=True).start()
             self._send(202, b"{}", "application/json")
         elif self.path == "/api/quit":

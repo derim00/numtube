@@ -1,4 +1,4 @@
-"""Installs NumSocial (NumTube and/or NumChat) on a calculator in "connected" (DFU) mode.
+"""Installs NumSocial (NumTube, NumChat and/or NumScreen) on a calculator in "connected" (DFU) mode.
 
 Uses NumWorks' own DFU code (numworks_dfu.py, from the Epsilon repository).
 The firmware images are built once; the version string the official kernel
@@ -29,7 +29,7 @@ VERSION_RE = re.compile(r"^\d{1,2}\.\d{1,2}\.\d{1,2}$")
 # Mask of the homebrew apps hidden on the Home screen, found by its magic
 # (see firmware epsilon/apps/home/homebrew_apps.cpp).
 HOMEBREW_MAGIC = b"NUMAPPS-HIDDEN1\0"
-HOMEBREW_BITS = {"numtube": 1, "numchat": 2}
+HOMEBREW_BITS = {"numtube": 1, "numchat": 2, "numscreen": 4}
 
 
 def _usb_backend():
@@ -107,7 +107,7 @@ def read_official_version(active_slot: str) -> str | None:
     return raw if VERSION_RE.match(raw) else None
 
 
-def patched_image(model: str, slot: str, version: str, apps=("numtube", "numchat")) -> str:
+def patched_image(model: str, slot: str, version: str, apps=("numtube", "numchat", "numscreen")) -> str:
     """Writes the firmware for this model and slot, with `version` as the
     expected official version and only `apps` shown, to a temporary .dfu file."""
     apps = [app for app in apps if app in HOMEBREW_BITS]
@@ -137,7 +137,7 @@ def patched_image(model: str, slot: str, version: str, apps=("numtube", "numchat
     return out_path
 
 
-def install(version: str, log, progress, apps=("numtube", "numchat")) -> None:
+def install(version: str, log, progress, apps=("numtube", "numchat", "numscreen")) -> None:
     """Flashes the chosen apps into the inactive slot and starts them."""
     device, info = find_calculator()
     if device is None:
@@ -150,7 +150,7 @@ def install(version: str, log, progress, apps=("numtube", "numchat")) -> None:
             f"Modèle {model.upper()} non pris en charge (N0115 et N0120 seulement)."
         )
     slot = _inactive_slot(info["active_slot"])
-    names = " et ".join({"numtube": "NumTube", "numchat": "NumChat"}[a] for a in apps)
+    names = " et ".join({"numtube": "NumTube", "numchat": "NumChat", "numscreen": "NumScreen"}[a] for a in apps)
     log(f"Modèle {model.upper()}, firmware officiel dans le slot {info['active_slot']}, "
         f"{names} {'iront' if len(apps) > 1 else 'ira'} dans le slot {slot}.")
     image = patched_image(model, slot, version, apps)

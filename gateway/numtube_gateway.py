@@ -95,6 +95,8 @@ T_STATUS = 0x4A
 T_LOG = 0x4B
 # NumChat frames, handled by gateway/numchat_service.py.
 T_CHAT_FIRST, T_CHAT_LAST = 0x60, 0x72
+# NumScreen frames, handled by gateway/numscreen_service.py.
+T_SCREEN_FIRST, T_SCREEN_LAST = 0x80, 0x8F
 
 CTRL_STOP = 0
 CTRL_PAUSE = 1
@@ -188,20 +190,22 @@ class FrameParser:
 class TileEncoder:
     """Delta encoder. `shadow` is exactly what the calculator is showing."""
 
-    def __init__(self) -> None:
-        self.shadow = np.zeros((ROWS, COLS, TILE, TILE), dtype=np.int32)
-        self.shadow_rgb = np.zeros((ROWS, COLS, TILE, TILE, 3), dtype=np.int32)
+    def __init__(self, rows: int = ROWS) -> None:
+        # rows of tiles: 45 for NumTube (320x180), 50 for NumScreen (320x200)
+        self.rows = rows
+        self.num_tiles = rows * COLS
+        self.shadow = np.zeros((rows, COLS, TILE, TILE), dtype=np.int32)
         self.force_full = True
 
     def invalidate(self) -> None:
         self.force_full = True
 
-    @staticmethod
-    def _to_tiles(rgb: np.ndarray) -> np.ndarray:
-        return rgb.reshape(ROWS, TILE, COLS, TILE, 3).transpose(0, 2, 1, 3, 4)
+    def _to_tiles(self, rgb: np.ndarray) -> np.ndarray:
+        return rgb.reshape(self.rows, TILE, COLS, TILE, 3).transpose(0, 2, 1, 3, 4)
 
     def encode(self, rgb: np.ndarray, budget: int) -> list[tuple[int, bytes]]:
         """Returns [(start_tile, ops)] for the tiles worth sending this frame."""
+        ROWS, NUM_TILES = self.rows, self.num_tiles
         tiles = self._to_tiles(rgb.astype(np.int32))
         r5, g6, b5 = tiles[..., 0] >> 3, tiles[..., 1] >> 2, tiles[..., 2] >> 3
 
@@ -257,8 +261,8 @@ class TileEncoder:
         idx_bytes = idx_bytes.reshape(NUM_TILES, TILE).astype(np.uint8)
         return self._serialize(send.ravel().tolist(), solid.ravel().tolist(), c0p, c1p, idx_bytes)
 
-    @staticmethod
-    def _serialize(send, solid, c0, c1, idx_bytes) -> list[tuple[int, bytes]]:
+    def _serialize(self, send, solid, c0, c1, idx_bytes) -> list[tuple[int, bytes]]:
+        NUM_TILES = self.num_tiles
         chunks: list[tuple[int, bytes]] = []
         ops = bytearray()
         chunk_start = 0
@@ -944,12 +948,29 @@ def chat_service(opts: argparse.Namespace):
         return _CHAT_SERVICE
 
 
+_SCREEN_SERVICE = None
+
+
+def screen_service(opts: argparse.Namespace):
+    """The NumScreen service (screen sharing), created on first use."""
+    global _SCREEN_SERVICE
+    with _CHAT_LOCK:
+        if _SCREEN_SERVICE is None:
+            import numscreen_service as screen
+
+            kind = getattr(opts, "numscreen", "real")
+            _SCREEN_SERVICE = screen.ScreenService(
+                lambda: TileEncoder(screen.ROWS), clean_text, truncate_utf8, log, kind)
+        return _SCREEN_SERVICE
+
+
 class Session:
     def __init__(self, link: SerialLink, opts: argparse.Namespace) -> None:
         self.link = link
         self.opts = opts
         self.player: Player | None = None
         self.chat = None
+        self.screen = None
 
     def stop_player(self) -> None:
         if self.player:
@@ -982,11 +1003,18 @@ class Session:
                 self.chat.attach(self.link)
             self.chat.handle(self.link, frame_type, payload)
             return
+        if T_SCREEN_FIRST <= frame_type <= T_SCREEN_LAST:
+            if self.screen is None:
+                self.screen = screen_service(self.opts)
+            self.screen.handle(self.link, frame_type, payload)
+            return
         if frame_type == T_LOG:
             log("  [calc] " + payload.decode("utf-8", "replace"))
         elif frame_type == T_HELLO:
             log("calculatrice connectee")
             self.stop_player()
+            if self.screen is not None:
+                self.screen.detach(self.link)
             self.link.send(T_HELLO_ACK, b"numtube/1")
         elif frame_type == T_SEARCH:
             query = payload.decode("utf-8", "ignore").strip()
@@ -1031,6 +1059,8 @@ class Session:
             self.stop_player()
             if self.chat is not None:
                 self.chat.detach(self.link)
+            if self.screen is not None:
+                self.screen.detach(self.link)
 
 
 def serve_usb(opts: argparse.Namespace, status=None) -> None:
@@ -1065,7 +1095,10 @@ def serve_usb(opts: argparse.Namespace, status=None) -> None:
 def default_options() -> argparse.Namespace:
     # NUMCHAT=demo in the environment: NumChat talks to a fake messaging app.
     numchat = "demo" if os.environ.get("NUMCHAT") == "demo" else "snapchat"
-    return argparse.Namespace(port=None, tcp=None, fps=15, lang=["fr", "en"], numchat=numchat)
+    # NUMSCREEN=demo: NumScreen sends a test picture and only logs the keys.
+    numscreen = "demo" if os.environ.get("NUMSCREEN") == "demo" else "real"
+    return argparse.Namespace(port=None, tcp=None, fps=15, lang=["fr", "en"], numchat=numchat,
+                              numscreen=numscreen)
 
 
 def main() -> int:
@@ -1077,6 +1110,9 @@ def main() -> int:
     ap.add_argument("--lang", default="fr,en", help="langues des sous-titres par priorite (defaut: fr,en)")
     ap.add_argument("--numchat", choices=["snapchat", "demo"], default="snapchat",
                     help="messagerie de NumChat: Snapchat Web, ou une demo pour tester (defaut: snapchat)")
+    ap.add_argument("--numscreen", choices=["real", "demo"], default="real",
+                    help="NumScreen: le vrai ecran et la vraie souris, ou une image de test sans "
+                         "rien piloter (defaut: real)")
     opts = ap.parse_args()
     opts.lang = [lang.strip() for lang in opts.lang.split(",") if lang.strip()]
 

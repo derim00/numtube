@@ -1,5 +1,6 @@
-NumSocial : YouTube (NumTube) et Snapchat (NumChat) sur ta NumWorks
-===================================================================
+NumSocial : YouTube (NumTube), Snapchat (NumChat) et l'écran du PC (NumScreen)
+sur ta NumWorks
+==============================================================================
 
 Ce qu'il faut
 - Une NumWorks N0120 ou N0115 (le modèle est écrit au dos), en version
@@ -9,6 +10,7 @@ Ce qu'il faut
   les vidéos (NumTube) et les messages (NumChat).
 - Pour NumChat : Google Chrome (sous Windows, Microsoft Edge marche aussi) et
   un compte Snapchat. Lis l'avertissement plus bas.
+- Pour NumScreen sur Mac : deux autorisations à donner une fois (voir 5.).
 
 1. Lancer NumSocial
 - Mac : double-clic sur NumSocial.app. La première fois, macOS bloque les
@@ -23,7 +25,7 @@ Une page s'ouvre dans ton navigateur. Laisse NumSocial ouvert.
 - Branche la calculatrice. Elle affiche « Calculatrice connectée »
   (sinon : reset au dos avec un trombone, puis rebranche).
 - Sur la page : vérifie la version officielle (lue automatiquement), coche
-  les applis voulues (NumTube, NumChat ou les deux), clique « Installer ».
+  les applis voulues (NumTube, NumChat, NumScreen), clique « Installer ».
 - Environ 1 minute. La calculatrice redémarre avec un écran
   « UNOFFICIAL SOFTWARE » : c'est normal. Les applis sont en bas de l'accueil.
 
@@ -52,6 +54,36 @@ Une page s'ouvre dans ton navigateur. Laisse NumSocial ouvert.
 - Un snap ouvert est consommé, comme sur le téléphone : l'expéditeur voit
   « Ouvert ». Rien n'est enregistré sur l'ordinateur.
 
+5. NumScreen (l'écran de l'ordinateur sur la calculatrice)
+- Mac, la première fois : Réglages Système > Confidentialité et sécurité :
+    Enregistrement de l'écran (ou « Enregistrement de l'écran et audio ») :
+      active NumSocial, puis quitte et relance NumSocial ;
+    Accessibilité : active NumSocial (pour la souris et le clavier).
+  Tant qu'il manque une autorisation, la calculatrice l'indique en bas.
+- Windows : rien à autoriser.
+- Ouvre NumScreen sur la calculatrice : l'écran du PC s'affiche en haut,
+  le mode et shift/alpha en bas.
+    flèches         déplacent la souris (maintenir : de plus en plus vite)
+    OK              clic (deux fois vite : double clic ; maintenir : glisser)
+    boîte à outils  clic droit (maintenu + flèches : tourner la caméra)
+    x,n,t           passe du mode souris au mode jeu et inversement
+                    mode jeu : flèches = flèches du clavier, OK = Espace
+    lettres         par défaut, comme en alpha sur la calculatrice
+    shift           passe aux chiffres, puis revient aux lettres
+    alpha           une majuscule (deux fois : majuscules verrouillées) ;
+                    en chiffres : le symbole jaune [ ] { } _ = < >
+    alpha + haut/bas  molette (mode souris)
+    var             Z Q S D sur 8 4 5 6 (jeux en AZERTY), var à nouveau : retour
+    EXE Entrée, retour Échap, effacer Retour arrière, Ans Espace,
+    x10^x apostrophe
+    en chiffres : exp, ln, log = Maj, Ctrl, Alt de l'ordinateur (maintenues)
+    maison          arrête le partage
+  Une touche maintenue sur la calculatrice reste maintenue sur l'ordinateur.
+- Pour jouer (Roblox...) : x,n,t pour le mode jeu, var pour Z Q S D sur
+  8 4 5 6 ; OK fait sauter.
+- L'image fait 320x200 à environ 15 images/s : assez pour naviguer et
+  jouer tranquillement, pas pour un jeu très rapide.
+
 Avertissement Snapchat
 - Piloter Snapchat Web automatiquement est contraire aux conditions
   d'utilisation de Snapchat. Ton compte peut être verrouillé, voire banni.
@@ -64,6 +96,8 @@ Revenir au firmware officiel
 Problèmes
 - « Le Mac ne répond plus » / « Le PC ne répond pas » : NumSocial n'est pas
   ouvert sur l'ordinateur.
+- NumScreen : la souris ne bouge pas, ou l'image ne montre que le fond
+  d'écran : il manque une autorisation (voir 5.), relance NumSocial.
 - NumChat affiche « Connecte Snapchat dans Chrome » : connecte-toi dans la
   fenêtre Chrome ouverte par NumSocial.
 - « OFFICIAL UPGRADE REQUIRED » : la version saisie ne correspond pas.

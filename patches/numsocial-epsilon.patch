@@ -74,7 +74,7 @@ index 22d935a989..e51baf487a 100644
  
  $(call i18n_without_universal,home/i18n/base)
 diff --git a/epsilon/apps/home/apps_layout.csv b/epsilon/apps/home/apps_layout.csv
-index e0273c401b..2537dfa86b 100644
+index e0273c401b..d78800bb19 100644
 --- a/epsilon/apps/home/apps_layout.csv
 +++ b/epsilon/apps/home/apps_layout.csv
 @@ -1,5 +1,5 @@
@@ -83,11 +83,11 @@ index e0273c401b..2537dfa86b 100644
 -Variant2,calculation,graph,solver,regression,sequence,distributions,statistics,code,elements,inference,finance,settings
 -Variant3,calculation,graph,solver,statistics,distributions,sequence,regression,inference,finance,elements,code,settings
 -Variant4,calculation,graph,solver,statistics,regression,sequence,distributions,inference,finance,elements,code,settings
-+Default,calculation,graph,code,statistics,distributions,solver,sequence,regression,elements,inference,finance,settings,termia,numtube,numchat
-+Variant1,calculation,graph,solver,statistics,regression,distributions,inference,sequence,code,elements,finance,settings,termia,numtube,numchat
-+Variant2,calculation,graph,solver,regression,sequence,distributions,statistics,code,elements,inference,finance,settings,termia,numtube,numchat
-+Variant3,calculation,graph,solver,statistics,distributions,sequence,regression,inference,finance,elements,code,settings,termia,numtube,numchat
-+Variant4,calculation,graph,solver,statistics,regression,sequence,distributions,inference,finance,elements,code,settings,termia,numtube,numchat
++Default,calculation,graph,code,statistics,distributions,solver,sequence,regression,elements,inference,finance,settings,termia,numtube,numchat,numscreen
++Variant1,calculation,graph,solver,statistics,regression,distributions,inference,sequence,code,elements,finance,settings,termia,numtube,numchat,numscreen
++Variant2,calculation,graph,solver,regression,sequence,distributions,statistics,code,elements,inference,finance,settings,termia,numtube,numchat,numscreen
++Variant3,calculation,graph,solver,statistics,distributions,sequence,regression,inference,finance,elements,code,settings,termia,numtube,numchat,numscreen
++Variant4,calculation,graph,solver,statistics,regression,sequence,distributions,inference,finance,elements,code,settings,termia,numtube,numchat,numscreen
 diff --git a/epsilon/apps/home/controller.cpp b/epsilon/apps/home/controller.cpp
 index 8dc01efaf4..a1ba087e17 100644
 --- a/epsilon/apps/home/controller.cpp
@@ -216,10 +216,10 @@ index 9b3aa8360b..bad59e45e0 100644
    bool appIsForbidden(I18n::Message appName) const;
 diff --git a/epsilon/apps/home/homebrew_apps.cpp b/epsilon/apps/home/homebrew_apps.cpp
 new file mode 100644
-index 0000000000..0fb06b3303
+index 0000000000..a7af8a1ee8
 --- /dev/null
 +++ b/epsilon/apps/home/homebrew_apps.cpp
-@@ -0,0 +1,27 @@
+@@ -0,0 +1,28 @@
 +#include "homebrew_apps.h"
 +
 +#include <stdint.h>
@@ -230,7 +230,7 @@ index 0000000000..0fb06b3303
 +
 +struct HomebrewConfig {
 +  char magic[16];
-+  uint32_t hiddenApps;  // bit 0: NumTube, bit 1: NumChat
++  uint32_t hiddenApps;  // bit 0: NumTube, bit 1: NumChat, bit 2: NumScreen
 +};
 +
 +/* volatile: the value is patched in the image after compilation, the compiler
@@ -243,13 +243,14 @@ index 0000000000..0fb06b3303
 +bool homebrewAppIsHidden(I18n::Message appName) {
 +  const uint32_t hidden = k_homebrewConfig.hiddenApps;
 +  return (appName == I18n::Message::NumtubeApp && (hidden & 1)) ||
-+         (appName == I18n::Message::NumchatApp && (hidden & 2));
++         (appName == I18n::Message::NumchatApp && (hidden & 2)) ||
++         (appName == I18n::Message::NumscreenApp && (hidden & 4));
 +}
 +
 +}  // namespace Home
 diff --git a/epsilon/apps/home/homebrew_apps.h b/epsilon/apps/home/homebrew_apps.h
 new file mode 100644
-index 0000000000..61bce847d5
+index 0000000000..a457aede12
 --- /dev/null
 +++ b/epsilon/apps/home/homebrew_apps.h
 @@ -0,0 +1,13 @@
@@ -259,7 +260,7 @@ index 0000000000..61bce847d5
 +
 +namespace Home {
 +
-+/* Which homebrew apps (NumTube, NumChat) show on the Home screen. Both are
++/* Which homebrew apps (NumTube, NumChat, NumScreen) show on the Home screen. Both are
 + * always compiled in; the installer on the computer hides the ones the user
 + * did not pick by writing a bit mask into this firmware image (it finds the
 + * mask by its magic string, like it finds the version in the header). */
@@ -267,7 +268,7 @@ index 0000000000..61bce847d5
 +
 +}  // namespace Home
 diff --git a/epsilon/apps/module.mak b/epsilon/apps/module.mak
-index e21c795826..a3a8d476d9 100644
+index e21c795826..ffe6d9e91b 100644
 --- a/epsilon/apps/module.mak
 +++ b/epsilon/apps/module.mak
 @@ -32,7 +32,7 @@ $(call depends_on_image,$(PATH_apps)/title_bar_view.cpp,$(PATH_apps)/exam_icon.p
@@ -275,7 +276,7 @@ index e21c795826..a3a8d476d9 100644
  # Include the specific apps
  # FIXME Use flavors instead of EPSILON_APPS?
 -EPSILON_APPS ?= calculation graph code statistics distributions inference solver sequence regression elements finance settings
-+EPSILON_APPS ?= calculation graph code statistics distributions inference solver sequence regression elements finance settings termia numtube numchat
++EPSILON_APPS ?= calculation graph code statistics distributions inference solver sequence regression elements finance settings termia numtube numchat numscreen
  
  _apps_classes := $(foreach a,$(EPSILON_APPS),$(call capitalize,$a)::App)
  _apps_snapshots_declaration := $(foreach a,$(_apps_classes),$a::Snapshot m_snapshot$(subst :,,$a)Snapshot;)
@@ -2076,6 +2077,669 @@ index 0000000000..0a7e268066
 +};
 +
 +}  // namespace Numchat
+diff --git a/epsilon/apps/numscreen/Makefile b/epsilon/apps/numscreen/Makefile
+new file mode 100644
+index 0000000000..16bec61243
+--- /dev/null
++++ b/epsilon/apps/numscreen/Makefile
+@@ -0,0 +1,9 @@
++SOURCES_apps += $(addprefix $(PATH_apps)/numscreen/,$(addsuffix :-test, \
++  app.cpp \
++  screen_controller.cpp \
++  numscreen_icon.png \
++))
++
++$(call depends_on_image,$(PATH_apps)/numscreen/app.cpp,$(PATH_apps)/numscreen/numscreen_icon.png)
++
++$(call i18n_with_universal,numscreen/i18n/base)
+diff --git a/epsilon/apps/numscreen/app.cpp b/epsilon/apps/numscreen/app.cpp
+new file mode 100644
+index 0000000000..41062b8801
+--- /dev/null
++++ b/epsilon/apps/numscreen/app.cpp
+@@ -0,0 +1,35 @@
++#include "app.h"
++
++#include <escher/container.h>
++#include <ion/events.h>
++
++#include "numscreen_icon.h"
++
++namespace Numscreen {
++
++const Escher::Image* App::Descriptor::icon() const {
++  return ImageStore::NumscreenIcon;
++}
++
++App* App::Snapshot::unpack(Escher::Container* container) {
++  return new (container->currentAppBuffer()) App(this);
++}
++
++const App::Descriptor* App::Snapshot::descriptor() const {
++  constexpr static Descriptor s_descriptor;
++  return &s_descriptor;
++}
++
++App::App(Snapshot* snapshot)
++    : Escher::App(snapshot, &m_controller),
++      m_controller(&m_modalViewController),
++      m_usbTimer(&m_controller) {}
++
++void App::willBecomeInactive() {
++  // Give the USB port back, and leave the keyboard as we found it.
++  m_controller.disconnect();
++  Ion::Events::setShiftAlphaStatus(Ion::Events::ShiftAlphaStatus());
++  Escher::App::willBecomeInactive();
++}
++
++}  // namespace Numscreen
+diff --git a/epsilon/apps/numscreen/app.h b/epsilon/apps/numscreen/app.h
+new file mode 100644
+index 0000000000..672a551f6e
+--- /dev/null
++++ b/epsilon/apps/numscreen/app.h
+@@ -0,0 +1,51 @@
++#pragma once
++
++#include <apps/i18n.h>
++#include <escher/app.h>
++
++#include "screen_controller.h"
++
++namespace Numscreen {
++
++class App : public Escher::App {
++ public:
++  class Descriptor : public Escher::App::Descriptor {
++   public:
++    I18n::Message name() const override { return I18n::Message::NumscreenApp; }
++    I18n::Message upperName() const override {
++      return I18n::Message::NumscreenAppCapital;
++    }
++    const Escher::Image* icon() const override;
++  };
++
++  class Snapshot : public Escher::App::Snapshot {
++   public:
++    App* unpack(Escher::Container* container) override;
++    const Descriptor* descriptor() const override;
++  };
++
++  void willBecomeInactive() override;
++  int numberOfTimers() override { return 1; }
++  Escher::Timer* timerAtIndex(int i) override { return &m_usbTimer; }
++
++ private:
++  // Starts the session once the app is on screen (every tick, 100 ms).
++  class UsbTimer : public Escher::Timer {
++   public:
++    explicit UsbTimer(ScreenController* controller)
++        : Escher::Timer(1), m_controller(controller) {}
++
++   private:
++    bool fire() override {
++      m_controller->tick();
++      return false;
++    }
++    ScreenController* m_controller;
++  };
++
++  App(Snapshot* snapshot);
++  ScreenController m_controller;
++  UsbTimer m_usbTimer;
++};
++
++}  // namespace Numscreen
+diff --git a/epsilon/apps/numscreen/i18n/base.de.i18n b/epsilon/apps/numscreen/i18n/base.de.i18n
+new file mode 100644
+index 0000000000..93a95b2121
+--- /dev/null
++++ b/epsilon/apps/numscreen/i18n/base.de.i18n
+@@ -0,0 +1 @@
++# NumScreen has no translated strings; see base.universal.i18n.
+diff --git a/epsilon/apps/numscreen/i18n/base.en.i18n b/epsilon/apps/numscreen/i18n/base.en.i18n
+new file mode 100644
+index 0000000000..93a95b2121
+--- /dev/null
++++ b/epsilon/apps/numscreen/i18n/base.en.i18n
+@@ -0,0 +1 @@
++# NumScreen has no translated strings; see base.universal.i18n.
+diff --git a/epsilon/apps/numscreen/i18n/base.es.i18n b/epsilon/apps/numscreen/i18n/base.es.i18n
+new file mode 100644
+index 0000000000..93a95b2121
+--- /dev/null
++++ b/epsilon/apps/numscreen/i18n/base.es.i18n
+@@ -0,0 +1 @@
++# NumScreen has no translated strings; see base.universal.i18n.
+diff --git a/epsilon/apps/numscreen/i18n/base.fr.i18n b/epsilon/apps/numscreen/i18n/base.fr.i18n
+new file mode 100644
+index 0000000000..93a95b2121
+--- /dev/null
++++ b/epsilon/apps/numscreen/i18n/base.fr.i18n
+@@ -0,0 +1 @@
++# NumScreen has no translated strings; see base.universal.i18n.
+diff --git a/epsilon/apps/numscreen/i18n/base.it.i18n b/epsilon/apps/numscreen/i18n/base.it.i18n
+new file mode 100644
+index 0000000000..93a95b2121
+--- /dev/null
++++ b/epsilon/apps/numscreen/i18n/base.it.i18n
+@@ -0,0 +1 @@
++# NumScreen has no translated strings; see base.universal.i18n.
+diff --git a/epsilon/apps/numscreen/i18n/base.nl.i18n b/epsilon/apps/numscreen/i18n/base.nl.i18n
+new file mode 100644
+index 0000000000..93a95b2121
+--- /dev/null
++++ b/epsilon/apps/numscreen/i18n/base.nl.i18n
+@@ -0,0 +1 @@
++# NumScreen has no translated strings; see base.universal.i18n.
+diff --git a/epsilon/apps/numscreen/i18n/base.pt.i18n b/epsilon/apps/numscreen/i18n/base.pt.i18n
+new file mode 100644
+index 0000000000..93a95b2121
+--- /dev/null
++++ b/epsilon/apps/numscreen/i18n/base.pt.i18n
+@@ -0,0 +1 @@
++# NumScreen has no translated strings; see base.universal.i18n.
+diff --git a/epsilon/apps/numscreen/i18n/base.universal.i18n b/epsilon/apps/numscreen/i18n/base.universal.i18n
+new file mode 100644
+index 0000000000..eff66dc71b
+--- /dev/null
++++ b/epsilon/apps/numscreen/i18n/base.universal.i18n
+@@ -0,0 +1,2 @@
++NumscreenApp = "NumScreen"
++NumscreenAppCapital = "NUMSCREEN"
+diff --git a/epsilon/apps/numscreen/numscreen_icon.png b/epsilon/apps/numscreen/numscreen_icon.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..ced7a04ec230f33a0cff1d0a5403cf7e36b41a1b
+GIT binary patch
+literal 2107
+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
+
+literal 0
+HcmV?d00001
+
+diff --git a/epsilon/apps/numscreen/protocol.h b/epsilon/apps/numscreen/protocol.h
+new file mode 100644
+index 0000000000..ac0369e583
+--- /dev/null
++++ b/epsilon/apps/numscreen/protocol.h
+@@ -0,0 +1,28 @@
++#pragma once
++
++#include <stdint.h>
++
++/* Frame types carried in TMIA frames between the calculator and the gateway.
++ * Keep in sync with gateway/numscreen_service.py. Hello/HelloAck/Log are
++ * shared with NumTube (see apps/numtube/protocol.h).
++ *
++ * The calculator is a thin client: it shows the picture of the computer
++ * screen and forwards every key press and release. Shift, alpha, the mouse
++ * and the key layout are handled by the gateway. */
++namespace Numscreen {
++namespace Protocol {
++
++enum Type : uint8_t {
++  Start = 0x80,   // PC <- calc: start sharing the screen
++  Frame = 0x81,   // PC -> calc: u16 frame, u16 start tile, u8 flags, tile ops
++  Ack = 0x82,     // PC <- calc: u16 frame, once fully drawn
++  Key = 0x83,     // PC <- calc: u8 key (Ion::Keyboard::Key), u8 down
++  Status = 0x84,  // PC -> calc: UTF-8 text for the bottom strip, 2 lines max
++  Stop = 0x85,    // PC <- calc: Home pressed, release everything
++};
++
++constexpr uint8_t k_endOfFrame = 1;
++constexpr uint16_t k_frameHeader = 5;
++
++}  // namespace Protocol
++}  // namespace Numscreen
+diff --git a/epsilon/apps/numscreen/screen_controller.cpp b/epsilon/apps/numscreen/screen_controller.cpp
+new file mode 100644
+index 0000000000..ffdfe78922
+--- /dev/null
++++ b/epsilon/apps/numscreen/screen_controller.cpp
+@@ -0,0 +1,322 @@
++#include "screen_controller.h"
++
++#include <apps/apps_container.h>
++#include <ion/display.h>
++#include <ion/keyboard.h>
++#include <ion/timing.h>
++#include <ion/usb.h>
++#include <string.h>
++
++#include "protocol.h"
++
++namespace Numscreen {
++
++using Ion::Keyboard::Key;
++
++namespace {
++
++constexpr KDColor k_background = KDColorWhite;
++constexpr KDColor k_text = KDColor::RGB24(0x202020);
++constexpr KDColor k_muted = KDColor::RGB24(0x707070);
++constexpr KDColor k_accent = KDColor::RGB24(0x2E7DF6);
++constexpr KDColor k_stripBackground = KDColorBlack;
++constexpr KDColor k_stripText = KDColor::RGB24(0xFFB734);
++
++// No frame at all from the gateway for this long: it is gone. The gateway
++// sends a (possibly empty) frame several times per second while sharing.
++constexpr uint32_t k_gatewayTimeoutMs = 15000;
++
++void copyString(char* destination, size_t capacity, const char* source,
++                size_t length) {
++  size_t count = length < capacity - 1 ? length : capacity - 1;
++  // Never cut a UTF-8 sequence in two.
++  if (count < length) {
++    while (count > 0 && (static_cast<uint8_t>(source[count]) & 0xC0) == 0x80) {
++      count--;
++    }
++  }
++  memcpy(destination, source, count);
++  destination[count] = '\0';
++}
++
++int glyphCount(const char* text, int bytes) {
++  int count = 0;
++  for (int i = 0; i < bytes; i++) {
++    const uint8_t byte = static_cast<uint8_t>(text[i]);
++    if ((byte & 0xC0) != 0x80 && byte != 0xCC && byte != 0xCD) {
++      count++;
++    }
++  }
++  return count;
++}
++
++KDContext* screenContext() {
++  KDContext* context = Ion::Display::Context::SharedContext;
++  context->setOrigin(KDPointZero);
++  context->setClippingRect(KDRect(0, 0, Ion::Display::Width, Ion::Display::Height));
++  return context;
++}
++
++bool isExitKey(Key key) { return key == Key::Home || key == Key::OnOff; }
++
++}  // namespace
++
++// --- Start view -------------------------------------------------------------
++
++void StartView::drawCentered(KDContext* ctx, const char* text, int y,
++                             KDColor color, KDFont::Size font) const {
++  const int width = KDFont::GlyphMaxWidth(font);
++  const int height = KDFont::GlyphHeight(font);
++  const KDGlyph::Style style{color, k_background, font};
++  while (*text != '\0') {
++    const char* end = strchr(text, '\n');
++    const int bytes = end ? static_cast<int>(end - text) : static_cast<int>(strlen(text));
++    const int x = (bounds().width() - glyphCount(text, bytes) * width) / 2;
++    ctx->drawString(text, KDPoint(x < 0 ? 0 : x, y), style, bytes);
++    y += height + 2;
++    text += bytes;
++    if (*text == '\n') {
++      text++;
++    }
++  }
++}
++
++void StartView::drawRect(KDContext* ctx, KDRect rect) const {
++  ctx->fillRect(bounds(), k_background);
++  drawCentered(ctx, "NumScreen", 18, k_accent, KDFont::Size::Large);
++  const char* message = m_controller->message();
++  if (message[0] != '\0') {
++    drawCentered(ctx, message, 70, k_text, KDFont::Size::Small);
++    drawCentered(ctx, "OK : relancer", 190, k_accent, KDFont::Size::Small);
++    return;
++  }
++  drawCentered(ctx,
++               "L'ecran de l'ordinateur sur la calculatrice.\n"
++               "Laisse l'appli NumSocial ouverte sur le PC.",
++               52, k_text, KDFont::Size::Small);
++  drawCentered(ctx,
++               "fleches : souris     OK : clic\n"
++               "x,n,t : mode souris / mode jeu\n"
++               "shift : lettres / chiffres   alpha : MAJ\n"
++               "var : ZQSD sur 8 4 5 6\n"
++               "outils : clic droit   maison : arreter",
++               100, k_muted, KDFont::Size::Small);
++  drawCentered(ctx, "OK : lancer le partage", 192, k_accent, KDFont::Size::Small);
++}
++
++// --- Controller -------------------------------------------------------------
++
++ScreenController::ScreenController(Escher::Responder* parentResponder)
++    : Escher::ViewController(parentResponder),
++      m_view(this),
++      m_decoder(m_rowBuffer, this),
++      m_keyState(0),
++      m_lastScan(0),
++      m_autoStart(true),
++      m_stripDirty(false),
++      m_framesSeen(false) {
++  m_message[0] = '\0';
++  m_status[0] = '\0';
++}
++
++void ScreenController::viewWillAppear() { m_view.redrawAll(); }
++
++void ScreenController::showStart() {
++  m_message[0] = '\0';
++  m_view.redrawAll();
++}
++
++void ScreenController::showMessage(const char* message) {
++  copyString(m_message, sizeof(m_message), message, strlen(message));
++  m_view.redrawAll();
++  AppsContainer::sharedAppsContainer()->redrawWindow();
++}
++
++void ScreenController::tick() {
++  // Share as soon as the app is open (once: Home ends a session).
++  if (m_autoStart) {
++    m_autoStart = false;
++    runSession();
++  }
++}
++
++void ScreenController::push(int x, int y, int width, const uint16_t* pixels) {
++  Ion::Display::pushRect(KDRect(x, y, width, 1),
++                         reinterpret_cast<const KDColor*>(pixels));
++}
++
++void ScreenController::drawStrip() {
++  m_stripDirty = false;
++  KDContext* context = screenContext();
++  const KDRect strip(0, k_stripY, Ion::Display::Width, k_stripHeight);
++  context->fillRect(strip, k_stripBackground);
++  const KDFont::Size font = KDFont::Size::Small;
++  const int glyphWidth = KDFont::GlyphMaxWidth(font);
++  const int glyphHeight = KDFont::GlyphHeight(font);
++  int lines = 0;
++  for (const char* c = m_status; *c != '\0'; c++) {
++    lines += (*c == '\n');
++  }
++  lines += (m_status[0] != '\0');
++  int y = k_stripY + (k_stripHeight - lines * (glyphHeight + 2)) / 2;
++  const KDGlyph::Style style{k_stripText, k_stripBackground, font};
++  const char* text = m_status;
++  while (*text != '\0') {
++    const char* end = strchr(text, '\n');
++    const int bytes = end ? static_cast<int>(end - text) : static_cast<int>(strlen(text));
++    const int x = (Ion::Display::Width - glyphCount(text, bytes) * glyphWidth) / 2;
++    context->drawString(text, KDPoint(x < 0 ? 0 : x, y), style, bytes);
++    y += glyphHeight + 2;
++    text += bytes;
++    if (*text == '\n') {
++      text++;
++    }
++  }
++}
++
++void ScreenController::handleFrame(uint8_t type, const uint8_t* payload,
++                                   uint16_t length) {
++  if (type == Protocol::Frame && length >= Protocol::k_frameHeader) {
++    const uint16_t startTile = static_cast<uint16_t>(payload[2] | (payload[3] << 8));
++    m_decoder.decode(startTile, payload + Protocol::k_frameHeader,
++                     length - Protocol::k_frameHeader);
++    if (payload[4] & Protocol::k_endOfFrame) {
++      m_framesSeen = true;
++      m_link.send(Protocol::Ack, payload, 2);
++    }
++  } else if (type == Protocol::Status) {
++    copyString(m_status, sizeof(m_status), reinterpret_cast<const char*>(payload),
++               length);
++    m_stripDirty = true;
++  }
++}
++
++/* Sends every key that went down or up since the last call. Returns false
++ * when Home (or On/Off) asks to stop sharing. The live keyboard state is read
++ * (the event queue only holds presses, not how long a key stays down), and a
++ * change counts once two reads in a row agree, against contact bounce. */
++bool ScreenController::forwardKeys() {
++  while (Ion::Keyboard::popState() != Ion::Keyboard::State(-1)) {
++    // Keep the queue empty so that nothing reaches Escher afterwards.
++  }
++  const uint64_t bits = static_cast<uint64_t>(Ion::Keyboard::scan());
++  if (bits != m_lastScan) {
++    m_lastScan = bits;
++    return true;
++  }
++  uint64_t changed = bits ^ m_keyState;
++  m_keyState = bits;
++  while (changed != 0) {
++    const int index = __builtin_ctzll(changed);
++    changed &= changed - 1;
++    const bool down = (bits >> index) & 1;
++    if (down && isExitKey(static_cast<Key>(index))) {
++      return false;
++    }
++    const uint8_t event[2] = {static_cast<uint8_t>(index),
++                              static_cast<uint8_t>(down ? 1 : 0)};
++    m_link.send(Protocol::Key, event, sizeof(event));
++  }
++  return true;
++}
++
++ScreenController::Exit ScreenController::share() {
++  Ion::Display::pushRectUniform(
++      KDRect(0, 0, Ion::Display::Width, k_pictureHeight), KDColorBlack);
++  copyString(m_status, sizeof(m_status), "Connexion a l'ecran du PC...", 28);
++  drawStrip();
++  m_framesSeen = false;
++  m_keyState = m_lastScan = static_cast<uint64_t>(Ion::Keyboard::scan());
++  m_link.send(Protocol::Start, nullptr, 0);
++
++  uint64_t lastFrame = Ion::Timing::millis();
++  uint64_t lastStart = lastFrame;
++  while (true) {
++    if (!forwardKeys()) {
++      return Exit::Stopped;
++    }
++    if (!Numtube::cablePlugged()) {
++      copyString(m_message, sizeof(m_message), "Cable USB debranche.", 20);
++      return Exit::Error;
++    }
++    uint8_t type;
++    const uint8_t* payload;
++    uint16_t length;
++    // Drain what is ready, but come back regularly for the keyboard.
++    for (int i = 0; i < 32 && m_link.poll(&type, &payload, &length); i++) {
++      lastFrame = Ion::Timing::millis();
++      handleFrame(type, payload, length);
++    }
++    if (m_stripDirty) {
++      drawStrip();
++    }
++    const uint64_t now = Ion::Timing::millis();
++    if (!m_framesSeen && now - lastStart > 4000) {
++      // The request was lost (or the gateway restarted): ask again.
++      m_link.send(Protocol::Start, nullptr, 0);
++      lastStart = now;
++    }
++    if (now - lastFrame > k_gatewayTimeoutMs) {
++      const char* text = "Le PC ne repond plus.\nL'appli NumSocial est-elle ouverte ?";
++      copyString(m_message, sizeof(m_message), text, strlen(text));
++      return Exit::Error;
++    }
++  }
++}
++
++/* While connected, the calculator never hands control back to Epsilon's event
++ * loop: idling there makes the USB port stop answering. So the whole session
++ * runs in share(), and the link closes when it ends. */
++void ScreenController::runSession() {
++  m_message[0] = '\0';
++  if (!m_link.isConnected()) {
++    showMessage("Connexion a l'ordinateur...\nOuvre l'appli NumSocial sur le PC.\n\nRetour : annuler");
++    m_message[0] = '\0';
++    switch (m_link.connect()) {
++      case Numtube::Link::ConnectResult::Connected:
++        break;
++      case Numtube::Link::ConnectResult::Cancelled:
++        showStart();
++        AppsContainer::sharedAppsContainer()->redrawWindow();
++        return;
++      case Numtube::Link::ConnectResult::NoCable:
++        showMessage("Branche la calculatrice a l'ordinateur avec le cable USB.");
++        return;
++    }
++  }
++  m_link.log("numscreen: session");
++  const Exit exit = share();
++  m_link.send(Protocol::Stop, nullptr, 0);
++  // Throw away what was already on the wire.
++  const uint64_t drainEnd = Ion::Timing::millis() + 150;
++  uint8_t type;
++  const uint8_t* payload;
++  uint16_t length;
++  while (Ion::Timing::millis() < drainEnd) {
++    m_link.poll(&type, &payload, &length);
++  }
++  m_link.disconnect();
++  if (exit == Exit::Stopped) {
++    m_message[0] = '\0';
++  }
++  // The session painted over the status bar too.
++  AppsContainer::sharedAppsContainer()->reloadTitleBarView();
++  m_view.redrawAll();
++  AppsContainer::sharedAppsContainer()->redrawWindow();
++}
++
++bool ScreenController::handleEvent(Ion::Events::Event event) {
++  /* Plugging the cable would normally open the "connected" DFU screen, which
++   * would kill the app. We take over the USB port when a session starts. */
++  if (event == Ion::Events::USBEnumeration) {
++    Ion::USB::clearEnumerationInterrupt();
++    return true;
++  }
++  if (event == Ion::Events::OK || event == Ion::Events::EXE) {
++    runSession();
++    return true;
++  }
++  return false;
++}
++
++}  // namespace Numscreen
+diff --git a/epsilon/apps/numscreen/screen_controller.h b/epsilon/apps/numscreen/screen_controller.h
+new file mode 100644
+index 0000000000..d22e561d86
+--- /dev/null
++++ b/epsilon/apps/numscreen/screen_controller.h
+@@ -0,0 +1,75 @@
++#pragma once
++
++#include <apps/numtube/link.h>
++#include <apps/numtube/tile_decoder.h>
++#include <escher/view.h>
++#include <escher/view_controller.h>
++#include <kandinsky/font.h>
++
++namespace Numscreen {
++
++class ScreenController;
++
++// Start and error screens (the shared screen itself is drawn straight to the
++// display by the session loop).
++class StartView : public Escher::View {
++ public:
++  explicit StartView(const ScreenController* controller) : m_controller(controller) {}
++  void drawRect(KDContext* ctx, KDRect rect) const override;
++  void redrawAll() { markRectAsDirty(bounds()); }
++
++ private:
++  void drawCentered(KDContext* ctx, const char* text, int y, KDColor color,
++                    KDFont::Size font) const;
++  const ScreenController* m_controller;
++};
++
++class ScreenController : public Escher::ViewController {
++ public:
++  explicit ScreenController(Escher::Responder* parentResponder);
++
++  Escher::View* view() override { return &m_view; }
++  bool handleEvent(Ion::Events::Event event) override;
++  void viewWillAppear() override;
++  void disconnect() { m_link.disconnect(); }
++  // Called by the app's timer while Escher runs.
++  void tick();
++
++  const char* message() const { return m_message; }
++
++  // TileDecoder's blitter interface.
++  void push(int x, int y, int width, const uint16_t* pixels);
++
++  // The computer screen: 320x200 at the top, a status strip below.
++  static constexpr int k_pictureRows = 50;  // rows of 4x4 tiles
++  static constexpr int k_pictureHeight = k_pictureRows * Numtube::k_tileSize;
++  static constexpr int k_stripY = k_pictureHeight;
++  static constexpr int k_stripHeight = 240 - k_pictureHeight;
++
++ private:
++  enum class Exit { Stopped, Error };
++
++  void showStart();
++  void showMessage(const char* message);
++  void runSession();
++  Exit share();
++  bool forwardKeys();
++  void handleFrame(uint8_t type, const uint8_t* payload, uint16_t length);
++  void drawStrip();
++
++  using Decoder = Numtube::TileDecoder<ScreenController, k_pictureRows>;
++
++  StartView m_view;
++  Numtube::Link m_link;
++  Decoder m_decoder;
++  uint16_t m_rowBuffer[Decoder::k_rowBufferPixels];
++  uint64_t m_keyState;
++  uint64_t m_lastScan;
++  bool m_autoStart;
++  bool m_stripDirty;
++  bool m_framesSeen;
++  char m_message[120];
++  char m_status[96];
++};
++
++}  // namespace Numscreen
 diff --git a/epsilon/apps/numtube/Makefile b/epsilon/apps/numtube/Makefile
 new file mode 100644
 index 0000000000..5ec8b4c403
@@ -3755,10 +4419,10 @@ index 0000000000..6235f6a1e8
 +}  // namespace Numtube
 diff --git a/epsilon/apps/numtube/tile_decoder.h b/epsilon/apps/numtube/tile_decoder.h
 new file mode 100644
-index 0000000000..63d343e874
+index 0000000000..9802c52915
 --- /dev/null
 +++ b/epsilon/apps/numtube/tile_decoder.h
-@@ -0,0 +1,143 @@
+@@ -0,0 +1,146 @@
 +#pragma once
 +
 +#include <stddef.h>
@@ -3781,7 +4445,9 @@ index 0000000000..63d343e874
 +constexpr int k_tileRows = k_videoHeight / k_tileSize;
 +constexpr int k_tileCount = k_tileCols * k_tileRows;
 +
-+template <typename Blitter>
++// Rows: rows of 4x4 tiles (45 for NumTube's 320x180 video, 50 for NumScreen's
++// 320x200 picture of the computer screen).
++template <typename Blitter, int Rows = k_tileRows>
 +class TileDecoder {
 + public:
 +  TileDecoder(uint16_t* rowBuffer, Blitter* blitter)
@@ -3789,6 +4455,7 @@ index 0000000000..63d343e874
 +
 +  // Row buffer: 4 lines of k_videoWidth RGB565 pixels.
 +  static constexpr size_t k_rowBufferPixels = k_videoWidth * k_tileSize;
++  static constexpr int k_count = Rows * k_tileCols;
 +
 +  // Decodes one chunk. Malformed input stops at the point of the error and
 +  // can never write outside the picture.
@@ -3797,7 +4464,7 @@ index 0000000000..63d343e874
 +    size_t pos = 0;
 +    m_spanStart = -1;
 +    m_spanRow = -1;
-+    while (pos < length && tile < k_tileCount) {
++    while (pos < length && tile < k_count) {
 +      const uint8_t op = ops[pos++];
 +      const int count = (op & 0x3F) + 1;
 +      switch (op >> 6) {
@@ -3812,7 +4479,7 @@ index 0000000000..63d343e874
 +          }
 +          const uint16_t color = read16(ops + pos);
 +          pos += 2;
-+          for (int i = 0; i < count && tile < k_tileCount; i++) {
++          for (int i = 0; i < count && tile < k_count; i++) {
 +            uint16_t* row = beginTile(tile++);
 +            for (int y = 0; y < k_tileSize; y++) {
 +              uint16_t* out = row + y * k_videoWidth;
@@ -3822,7 +4489,7 @@ index 0000000000..63d343e874
 +          break;
 +        }
 +        case 2:
-+          for (int i = 0; i < count && tile < k_tileCount; i++) {
++          for (int i = 0; i < count && tile < k_count; i++) {
 +            if (pos + 8 > length) {
 +              flush();
 +              return;

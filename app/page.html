@@ -107,6 +107,9 @@
       <label class="app"><input type="checkbox" id="appNumchat" checked>
         <div><b>NumChat</b><span>Tes messages Snapchat, à lire et à écrire depuis la calculatrice.
           Il faut Google Chrome sur cet ordinateur : la première fois, connecte-toi à Snapchat dans la fenêtre qui s'ouvre.</span></div></label>
+      <label class="app"><input type="checkbox" id="appNumscreen" checked>
+        <div><b>NumScreen</b><span>L'écran de cet ordinateur sur la calculatrice : souris avec les flèches, clavier avec les touches, même pour jouer.
+          Sur Mac, autorise NumSocial dans Réglages Système → Confidentialité et sécurité → Enregistrement de l'écran et Accessibilité.</span></div></label>
     </div>
     <button id="go">Installer sur la calculatrice</button>
     <div class="bar" id="bar" hidden><div id="fill"></div></div>
@@ -121,7 +124,7 @@
   </section>
 
   <footer>
-    <span>Laisse cette appli ouverte pendant que tu utilises NumTube ou NumChat.</span>
+    <span>Laisse cette appli ouverte pendant que tu utilises NumTube, NumChat ou NumScreen.</span>
     <button class="quiet" id="quit">Quitter</button>
   </footer>
 </main>
@@ -153,7 +156,7 @@ async function refresh() {
       `Modèle ${d.model.toUpperCase()}. Clique sur « Installer ».`);
   } else if (s.calculator === "numtube") {
     setStatus("ok", "La calculatrice est connectée",
-      "Les vidéos (NumTube) et les messages (NumChat) passent par cet ordinateur.");
+      "Les vidéos (NumTube), les messages (NumChat) et l'écran partagé (NumScreen) passent par cet ordinateur.");
   } else if (s.calculator === "error") {
     setStatus("warn", "La calculatrice est branchée mais inaccessible",
       linux ? "Sous Linux, autorise l'accès USB une fois :" : (s.detail.error || ""),
@@ -162,7 +165,7 @@ async function refresh() {
     setStatus("", "Branche ta calculatrice", "", [
       "Relie-la à cet ordinateur avec un câble USB qui transfère les données.",
       "Pour installer : elle doit afficher « Calculatrice connectée ». Sinon, appuie sur reset au dos puis rebranche.",
-      "Si c'est déjà installé : ouvre NumTube ou NumChat sur la calculatrice.",
+      "Si c'est déjà installé : ouvre NumTube, NumChat ou NumScreen sur la calculatrice.",
     ]);
   }
 
@@ -192,7 +195,7 @@ $("go").addEventListener("click", async () => {
     $("version").focus();
     return;
   }
-  const apps = [["numtube", "appNumtube"], ["numchat", "appNumchat"]]
+  const apps = [["numtube", "appNumtube"], ["numchat", "appNumchat"], ["numscreen", "appNumscreen"]]
     .filter(([, id]) => $(id).checked).map(([name]) => name);
   if (!apps.length) {
     $("result").textContent = "Choisis au moins une appli.";

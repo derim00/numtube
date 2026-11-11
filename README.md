@@ -12,8 +12,9 @@ YouTube (français en priorité) s'affichent sous l'image.
 
 > **Nouveau (v2)** : NumTube fait partie de **[NumSocial](https://github.com/derim00/numsocial)**.
 > Le même firmware contient aussi **[NumChat](https://github.com/derim00/numchat)**
-> (Snapchat sur la calculatrice), et l'appli s'appelle désormais **NumSocial** :
-> au moment d'installer, tu coches NumTube, NumChat ou les deux.
+> (Snapchat sur la calculatrice) et **[NumScreen](https://github.com/derim00/numscreen)** (l'écran de l'ordinateur sur la
+> calculatrice, avec la souris et le clavier), et l'appli s'appelle désormais
+> **NumSocial** : au moment d'installer, tu coches les applis que tu veux.
 
 ## Sommaire
 
@@ -35,11 +36,11 @@ contient donc **aucun code ni aucun firmware de NumWorks**. Il contient :
 
 | Dossier | Contenu |
 | --- | --- |
-| `patches/numsocial-epsilon.patch` | les modifications à appliquer à Epsilon (lien USB de Termia, NumTube, NumChat, choix des applis) |
+| `patches/numsocial-epsilon.patch` | les modifications à appliquer à Epsilon (lien USB de Termia, NumTube, NumChat, NumScreen, choix des applis) |
 | `EPSILON_COMMIT` | la version exacte d'Epsilon sur laquelle le patch s'applique |
 | `scripts/build-firmware.sh` | télécharge Epsilon chez NumWorks, applique le patch, compile |
 | `app/` | l'appli NumSocial : installeur et passerelle (page dans le navigateur) |
-| `gateway/` | la passerelle seule, en ligne de commande (`numtube_gateway.py` pour YouTube, `numchat_*.py` pour Snapchat) |
+| `gateway/` | la passerelle seule, en ligne de commande (`numtube_gateway.py` pour YouTube, `numchat_*.py` pour Snapchat, `numscreen_*.py` pour le partage d'écran) |
 | `tests/` | tests du codec vidéo et fausses calculatrices pour tester la passerelle |
 
 Chacun récupère Epsilon depuis [le dépôt officiel de NumWorks](https://github.com/numworks/epsilon)
@@ -101,7 +102,7 @@ Une page s'ouvre dans le navigateur (`http://127.0.0.1:8737`) :
 1. Branche la calculatrice : elle affiche « Calculatrice connectée »
    (sinon reset au dos, puis rebranche).
 2. L'appli lit la version officielle de la calculatrice et l'inscrit dans le firmware.
-3. Coche **NumTube** (et **NumChat** si tu le veux aussi).
+3. Coche **NumTube** (et **NumChat**, **NumScreen** si tu les veux aussi).
 4. Clique **Installer sur la calculatrice** (environ 1 minute).
 
 Le firmware officiel n'est jamais effacé : NumSocial va dans l'autre emplacement
@@ -134,7 +135,7 @@ Sans l'appli, la passerelle seule se lance avec `./numsocial`.
   passerelle saute des images au lieu de prendre du retard.
 - **Version** : le noyau officiel n'accepte qu'un firmware qui annonce la même
   version que lui. L'installeur écrit cette version dans l'image avant de flasher.
-- **Choix des applis** : NumTube et NumChat sont toujours compilés ensemble.
+- **Choix des applis** : NumTube, NumChat et NumScreen sont toujours compilés ensemble.
   L'installeur écrit dans l'image un masque (repéré par la chaîne
   `NUMAPPS-HIDDEN1`) qui dit à l'écran d'accueil lesquelles cacher.
 
@@ -150,6 +151,7 @@ cd tests
 ../.venv/bin/python3 codec_test.py              # décodeur C++ de la calculatrice == encodeur, au bit près
 ../.venv/bin/python3 fake_calculator.py "numworks"   # fausse calculatrice NumTube contre la vraie passerelle
 ../.venv/bin/python3 fake_numchat.py                 # fausse calculatrice NumChat (messagerie de démo)
+../.venv/bin/python3 fake_numscreen.py               # fausse calculatrice NumScreen (image de test, rien n'est cliqué)
 ```
 
 ## Avertissements

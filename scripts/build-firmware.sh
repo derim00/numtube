@@ -45,7 +45,7 @@ fi
 say "3/4  Environnement Python de compilation"
 [ -x "$VENV/bin/python3" ] || python3 -m venv "$VENV"
 "$VENV/bin/pip" -q install lz4 pypng pyelftools pyusb stringcase numpy \
-  libusb-package imageio-ffmpeg yt-dlp certifi pyinstaller pillow playwright
+  libusb-package imageio-ffmpeg yt-dlp certifi pyinstaller pillow playwright mss
 
 say "4/4  Compilation du firmware (quelques minutes par image)"
 mkdir -p "$ROOT/app/firmware"
