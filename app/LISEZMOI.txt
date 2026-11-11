@@ -1,5 +1,5 @@
-NumSocial : YouTube (NumTube), Snapchat (NumChat) et l'écran du PC (NumScreen)
-sur ta NumWorks
+NumSocial : YouTube (NumTube), Snapchat (NumChat), l'écran du PC (NumScreen)
+et Minecraft multijoueur (NumBlocks) sur ta NumWorks
 ==============================================================================
 
 Ce qu'il faut
@@ -25,7 +25,7 @@ Une page s'ouvre dans ton navigateur. Laisse NumSocial ouvert.
 - Branche la calculatrice. Elle affiche « Calculatrice connectée »
   (sinon : reset au dos avec un trombone, puis rebranche).
 - Sur la page : vérifie la version officielle (lue automatiquement), coche
-  les applis voulues (NumTube, NumChat, NumScreen), clique « Installer ».
+  les applis voulues (NumTube, NumChat, NumScreen, NumBlocks), clique « Installer ».
 - Environ 1 minute. La calculatrice redémarre avec un écran
   « UNOFFICIAL SOFTWARE » : c'est normal. Les applis sont en bas de l'accueil.
 
@@ -83,6 +83,19 @@ Une page s'ouvre dans ton navigateur. Laisse NumSocial ouvert.
   8 4 5 6 ; OK fait sauter.
 - L'image fait 320x200 à environ 15 images/s : assez pour naviguer et
   jouer tranquillement, pas pour un jeu très rapide.
+
+6. NumBlocks (Minecraft, en solo ou à plusieurs)
+- NumBlocks est le jeu de Mason Chen (NumPlay), avec un mode multijoueur en
+  plus. Laisse NumSocial ouvert et la calculatrice branchée pour jouer en ligne.
+- Rejoindre : écran titre > Multiplayer. La liste montre les parties ouvertes
+  partout dans le monde ; flèches pour choisir, Join Server. Le bouton
+  « Name » change ton pseudo.
+- Ouvrir ton monde : en jeu, Pause > Open to LAN > Start LAN World. Le chat
+  affiche le code de la partie, et elle apparaît dans la liste des autres.
+  Pas besoin d'être sur le même Wi-Fi : tout passe par Internet.
+- En partie : les autres joueurs, leurs blocs et le chat (touche x) sont
+  partagés. Pause > Disconnect pour partir.
+- Seul l'Overworld est partagé ; chacun a ses propres monstres.
 
 Avertissement Snapchat
 - Piloter Snapchat Web automatiquement est contraire aux conditions

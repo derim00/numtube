@@ -12,9 +12,10 @@ YouTube (français en priorité) s'affichent sous l'image.
 
 > **Nouveau (v2)** : NumTube fait partie de **[NumSocial](https://github.com/derim00/numsocial)**.
 > Le même firmware contient aussi **[NumChat](https://github.com/derim00/numchat)**
-> (Snapchat sur la calculatrice) et **[NumScreen](https://github.com/derim00/numscreen)** (l'écran de l'ordinateur sur la
-> calculatrice, avec la souris et le clavier), et l'appli s'appelle désormais
-> **NumSocial** : au moment d'installer, tu coches les applis que tu veux.
+> (Snapchat sur la calculatrice), **[NumScreen](https://github.com/derim00/numscreen)** (l'écran de l'ordinateur sur la
+> calculatrice, avec la souris et le clavier) et **[NumBlocks](https://github.com/derim00/numblocks-multiplayer)** (Minecraft en
+> multijoueur), et l'appli s'appelle désormais **NumSocial** : au moment
+> d'installer, tu coches les applis que tu veux.
 
 ## Sommaire
 
@@ -36,7 +37,8 @@ contient donc **aucun code ni aucun firmware de NumWorks**. Il contient :
 
 | Dossier | Contenu |
 | --- | --- |
-| `patches/numsocial-epsilon.patch` | les modifications à appliquer à Epsilon (lien USB de Termia, NumTube, NumChat, NumScreen, choix des applis) |
+| `patches/numsocial-epsilon.patch` | les modifications à appliquer à Epsilon (lien USB de Termia, NumTube, NumChat, NumScreen, choix des applis, lien USB pour les applis externes) |
+| `NUMBLOCKS_COMMIT`, `nwa/` | la version de NumBlocks multijoueur compilée avec le firmware, et l'outil qui compile les applis externes |
 | `EPSILON_COMMIT` | la version exacte d'Epsilon sur laquelle le patch s'applique |
 | `scripts/build-firmware.sh` | télécharge Epsilon chez NumWorks, applique le patch, compile |
 | `app/` | l'appli NumSocial : installeur et passerelle (page dans le navigateur) |
@@ -152,6 +154,7 @@ cd tests
 ../.venv/bin/python3 fake_calculator.py "numworks"   # fausse calculatrice NumTube contre la vraie passerelle
 ../.venv/bin/python3 fake_numchat.py                 # fausse calculatrice NumChat (messagerie de démo)
 ../.venv/bin/python3 fake_numscreen.py               # fausse calculatrice NumScreen (image de test, rien n'est cliqué)
+../.venv/bin/python3 fake_numblocks.py               # deux fausses calculatrices NumBlocks, à travers le broker public
 ```
 
 ## Avertissements

@@ -30,6 +30,9 @@ VERSION_RE = re.compile(r"^\d{1,2}\.\d{1,2}\.\d{1,2}$")
 # (see firmware epsilon/apps/home/homebrew_apps.cpp).
 HOMEBREW_MAGIC = b"NUMAPPS-HIDDEN1\0"
 HOMEBREW_BITS = {"numtube": 1, "numchat": 2, "numscreen": 4}
+# External apps, installed with the firmware in its slot's external apps area (see nwa/build_nwa.py).
+EXTERNAL_APPS = {"numblocks": "NumBlocks"}
+NAMES = {"numtube": "NumTube", "numchat": "NumChat", "numscreen": "NumScreen", **EXTERNAL_APPS}
 
 
 def _usb_backend():
@@ -51,6 +54,26 @@ def _find(*args, **kwargs):
 
 
 usb.core.find = _find
+
+# Windows: WinUSB refuses SET_CONFIGURATION, even to the configuration the device already has (macOS
+# and Linux accept it). NumWorks' DFU code always sets it; keep the current one when there is one.
+_original_set_configuration = usb.core.Device.set_configuration
+
+
+def _set_configuration(self, *args, **kwargs):
+    try:
+        if self.get_active_configuration() is not None and not args and not kwargs:
+            return
+    except usb.core.USBError:
+        pass
+    try:
+        _original_set_configuration(self, *args, **kwargs)
+    except (usb.core.USBError, NotImplementedError):
+        if sys.platform != "win32":
+            raise
+
+
+usb.core.Device.set_configuration = _set_configuration
 
 
 class InstallError(Exception):
@@ -110,9 +133,9 @@ def read_official_version(active_slot: str) -> str | None:
 def patched_image(model: str, slot: str, version: str, apps=("numtube", "numchat", "numscreen")) -> str:
     """Writes the firmware for this model and slot, with `version` as the
     expected official version and only `apps` shown, to a temporary .dfu file."""
-    apps = [app for app in apps if app in HOMEBREW_BITS]
-    if not apps:
+    if not any(app in HOMEBREW_BITS or app in EXTERNAL_APPS for app in apps):
         raise InstallError("Choisis au moins une appli à installer.")
+    apps = [app for app in apps if app in HOMEBREW_BITS]
     if not VERSION_RE.match(version) or len(version) > 7:
         raise InstallError("Version invalide : « %s » (exemple : 26.4.0)." % version)
     path = os.path.join(FIRMWARE_DIR, f"numsocial-{model}-{slot}.dfu")
@@ -137,6 +160,35 @@ def patched_image(model: str, slot: str, version: str, apps=("numtube", "numchat
     return out_path
 
 
+def external_elements(model: str, slot: str, apps) -> list[dict]:
+    """The DFU elements that put the chosen external apps in the slot's external apps area: the apps,
+    one after the other on 64 KB sectors, then a word that is not an app (none of what was there
+    before stays listed)."""
+    import json
+
+    elements, address, end = [], None, None
+    for app in apps:
+        if app not in EXTERNAL_APPS:
+            continue
+        base = os.path.join(FIRMWARE_DIR, f"{app}-{model}-{slot}")
+        if not (os.path.exists(base + ".bin") and os.path.exists(base + ".json")):
+            raise InstallError(f"{EXTERNAL_APPS[app]} n'est pas compilé pour le modèle {model}.")
+        with open(base + ".json") as f:
+            meta = json.load(f)
+        if address is None:
+            address, end = meta["address"], meta["end"]
+        elif meta["address"] != address:
+            # (each is linked for the start of the area: one external app at a time for now)
+            raise InstallError("Une seule appli externe à la fois.")
+        with open(base + ".bin", "rb") as f:
+            data = f.read()
+        elements.append({"addr": address, "data": data, "size": len(data)})
+        address = (address + len(data) + 0xFFFF) & ~0xFFFF
+    if address is not None and address + 4 <= end:
+        elements.append({"addr": address, "data": b"\0\0\0\0", "size": 4})
+    return elements
+
+
 def install(version: str, log, progress, apps=("numtube", "numchat", "numscreen")) -> None:
     """Flashes the chosen apps into the inactive slot and starts them."""
     device, info = find_calculator()
@@ -150,7 +202,7 @@ def install(version: str, log, progress, apps=("numtube", "numchat", "numscreen"
             f"Modèle {model.upper()} non pris en charge (N0115 et N0120 seulement)."
         )
     slot = _inactive_slot(info["active_slot"])
-    names = " et ".join({"numtube": "NumTube", "numchat": "NumChat", "numscreen": "NumScreen"}[a] for a in apps)
+    names = " et ".join(NAMES[a] for a in apps if a in NAMES)
     log(f"Modèle {model.upper()}, firmware officiel dans le slot {info['active_slot']}, "
         f"{names} {'iront' if len(apps) > 1 else 'ira'} dans le slot {slot}.")
     image = patched_image(model, slot, version, apps)
@@ -158,6 +210,7 @@ def install(version: str, log, progress, apps=("numtube", "numchat", "numscreen"
         elements = dfu.read_dfu_file(image)
         if not elements:
             raise InstallError("Image de firmware invalide.")
+        elements += external_elements(model, slot, apps)
         leave_address = elements[0]["addr"]
         dfu.init()
         log("Écriture du firmware (environ 1 minute)...")

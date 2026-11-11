@@ -97,6 +97,8 @@ T_LOG = 0x4B
 T_CHAT_FIRST, T_CHAT_LAST = 0x60, 0x72
 # NumScreen frames, handled by gateway/numscreen_service.py.
 T_SCREEN_FIRST, T_SCREEN_LAST = 0x80, 0x8F
+# NumBlocks multiplayer frames, handled by gateway/numblocks_service.py.
+T_BLOCKS_FIRST, T_BLOCKS_LAST = 0x90, 0xA3
 
 CTRL_STOP = 0
 CTRL_PAUSE = 1
@@ -964,6 +966,13 @@ def screen_service(opts: argparse.Namespace):
         return _SCREEN_SERVICE
 
 
+def blocks_service():
+    """NumBlocks multiplayer, one per connected calculator."""
+    import numblocks_service
+
+    return numblocks_service.NumBlocksService(log)
+
+
 class Session:
     def __init__(self, link: SerialLink, opts: argparse.Namespace) -> None:
         self.link = link
@@ -971,6 +980,7 @@ class Session:
         self.player: Player | None = None
         self.chat = None
         self.screen = None
+        self.blocks = None
 
     def stop_player(self) -> None:
         if self.player:
@@ -1003,6 +1013,11 @@ class Session:
                 self.chat.attach(self.link)
             self.chat.handle(self.link, frame_type, payload)
             return
+        if T_BLOCKS_FIRST <= frame_type <= T_BLOCKS_LAST:
+            if self.blocks is None:
+                self.blocks = blocks_service()
+            self.blocks.handle(self.link, frame_type, payload)
+            return
         if T_SCREEN_FIRST <= frame_type <= T_SCREEN_LAST:
             if self.screen is None:
                 self.screen = screen_service(self.opts)
@@ -1015,6 +1030,8 @@ class Session:
             self.stop_player()
             if self.screen is not None:
                 self.screen.detach(self.link)
+            if self.blocks is not None:
+                self.blocks.detach(self.link)
             self.link.send(T_HELLO_ACK, b"numtube/1")
         elif frame_type == T_SEARCH:
             query = payload.decode("utf-8", "ignore").strip()
@@ -1061,6 +1078,8 @@ class Session:
                 self.chat.detach(self.link)
             if self.screen is not None:
                 self.screen.detach(self.link)
+            if self.blocks is not None:
+                self.blocks.detach(self.link)
 
 
 def serve_usb(opts: argparse.Namespace, status=None) -> None:

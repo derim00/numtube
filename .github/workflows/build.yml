@@ -1,4 +1,4 @@
-# Builds YOUR NumSocial app (Windows and Mac): NumTube + NumChat, firmware included.
+# Builds YOUR NumSocial app (Windows and Mac): NumTube, NumChat, NumScreen and NumBlocks, firmware included.
 #
 # It only runs in a PRIVATE copy of this repository ("Use this template" ->
 # Private). The firmware is compiled from NumWorks' own sources for you, in
@@ -43,6 +43,8 @@ jobs:
           retention-days: 1
           path: |
             app/firmware/*.dfu
+            app/firmware/*.bin
+            app/firmware/*.json
             app/numworks_dfu.py
 
   app:
@@ -66,7 +68,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install Python packages
-        run: python -m pip install pyinstaller pillow numpy pyusb libusb-package imageio-ffmpeg yt-dlp certifi playwright mss
+        run: python -m pip install pyinstaller pillow numpy pyusb libusb-package imageio-ffmpeg yt-dlp certifi playwright mss paho-mqtt
       - name: Build the app
         run: python app/build.py
       - name: Self-test (Windows)

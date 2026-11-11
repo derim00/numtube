@@ -110,6 +110,9 @@
       <label class="app"><input type="checkbox" id="appNumscreen" checked>
         <div><b>NumScreen</b><span>L'écran de cet ordinateur sur la calculatrice : souris avec les flèches, clavier avec les touches, même pour jouer.
           Sur Mac, autorise NumSocial dans Réglages Système → Confidentialité et sécurité → Enregistrement de l'écran et Accessibilité.</span></div></label>
+      <label class="app"><input type="checkbox" id="appNumblocks" checked>
+        <div><b>NumBlocks (multijoueur)</b><span>Minecraft sur la calculatrice (NumBlocks de NumPlay, par Mason Chen), avec un mode multijoueur en ligne :
+          ouvre ton monde ou rejoins celui de n'importe qui, depuis chez toi. Remplace les applis externes déjà installées dans cet emplacement.</span></div></label>
     </div>
     <button id="go">Installer sur la calculatrice</button>
     <div class="bar" id="bar" hidden><div id="fill"></div></div>
@@ -195,7 +198,7 @@ $("go").addEventListener("click", async () => {
     $("version").focus();
     return;
   }
-  const apps = [["numtube", "appNumtube"], ["numchat", "appNumchat"], ["numscreen", "appNumscreen"]]
+  const apps = [["numtube", "appNumtube"], ["numchat", "appNumchat"], ["numscreen", "appNumscreen"], ["numblocks", "appNumblocks"]]
     .filter(([, id]) => $(id).checked).map(([name]) => name);
   if (!apps.length) {
     $("result").textContent = "Choisis au moins une appli.";

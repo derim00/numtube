@@ -18,3 +18,4 @@ tests/sim/
 .DS_Store
 .fresh-build.log
 *.log
+numblocks/

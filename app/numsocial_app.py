@@ -47,6 +47,7 @@ if len(sys.argv) > 1 and sys.argv[1] == "--self-test":
                                         text=True).stdout.strip() or "MISSING")
     import numchat_media, numchat_service, numchat_snap  # noqa: F401  (NumChat loads)
     import mss, numscreen_input, numscreen_service  # noqa: F401  (NumScreen loads)
+    import paho.mqtt.client, numblocks_service  # noqa: F401  (NumBlocks multiplayer loads)
     print("numscreen:", numscreen_input.create("real").name)
     firmware = sorted(os.listdir(os.path.join(here, "firmware")))
     print("firmware:", firmware)
@@ -148,6 +149,12 @@ def run_install(version: str, apps: list[str]) -> None:
     except Exception as error:
         result = f"Erreur : {error}"
         app_log(result)
+        if not isinstance(error, flasher.InstallError):
+            # (the details, for whoever helps: the step that failed and the USB error)
+            import traceback
+
+            for line in traceback.format_exception(error)[-4:]:
+                app_log("  " + line.rstrip().replace("\n", " | "))
     with STATE.lock:
         STATE.installing, STATE.install_result = False, result
 
@@ -200,7 +207,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(409, b"", "text/plain")
                 return
             version = str(body.get("version", "")).strip()
-            apps = [str(a) for a in body.get("apps") or ["numtube", "numchat", "numscreen"]]
+            apps = [str(a) for a in body.get("apps") or ["numtube", "numchat", "numscreen", "numblocks"]]
             threading.Thread(target=run_install, args=(version, apps), daemon=True).start()
             self._send(202, b"{}", "application/json")
         elif self.path == "/api/quit":
