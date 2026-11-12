@@ -50,7 +50,7 @@ fi
 say "3/4  Environnement Python de compilation"
 [ -x "$VENV/bin/python3" ] || python3 -m venv "$VENV"
 "$VENV/bin/pip" -q install lz4 pypng pyelftools pyusb stringcase numpy \
-  libusb-package imageio-ffmpeg yt-dlp certifi pyinstaller pillow playwright mss paho-mqtt
+  libusb-package imageio-ffmpeg yt-dlp certifi pyinstaller pillow playwright mss paho-mqtt cryptography segno
 
 say "NumBlocks Multiplayer ($NB_COMMIT)"
 if [ ! -d "$NB_SRC/.git" ]; then

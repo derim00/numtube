@@ -110,6 +110,9 @@
       <label class="app"><input type="checkbox" id="appNumscreen" checked>
         <div><b>NumScreen</b><span>L'écran de cet ordinateur sur la calculatrice : souris avec les flèches, clavier avec les touches, même pour jouer.
           Sur Mac, autorise NumSocial dans Réglages Système → Confidentialité et sécurité → Enregistrement de l'écran et Accessibilité.</span></div></label>
+      <label class="app"><input type="checkbox" id="appNumcam" checked>
+        <div><b>NumCam</b><span>La caméra de ton téléphone sur la calculatrice : photos et vidéos (enregistrées dans Images/NumCam).
+          Le téléphone ouvre une page sur ton Wi-Fi : voir l'encadré NumCam plus bas.</span></div></label>
       <label class="app"><input type="checkbox" id="appNumblocks" checked>
         <div><b>NumBlocks (multijoueur)</b><span>Minecraft sur la calculatrice (NumBlocks de NumPlay, par Mason Chen), avec un mode multijoueur en ligne :
           ouvre ton monde ou rejoins celui de n'importe qui, depuis chez toi. Remplace les applis externes déjà installées dans cet emplacement.</span></div></label>
@@ -118,6 +121,18 @@
     <div class="bar" id="bar" hidden><div id="fill"></div></div>
     <div class="hint" id="phase"></div>
     <div class="result" id="result"></div>
+  </section>
+
+  <section class="card" id="camera">
+    <h2 style="margin:0;font-size:18px">NumCam : la caméra du téléphone</h2>
+    <p class="hint" style="margin:4px 0 8px">Sur le téléphone (même Wi-Fi que cet ordinateur), scanne ce code ou ouvre
+      l'adresse, puis « Ouvrir la caméra ». La première fois, le téléphone prévient que la connexion n'est pas privée
+      (le certificat est fait par NumSocial) : « Afficher les détails » > « Visiter ce site » (iPhone) ou « Paramètres
+      avancés » > « Continuer » (Android). Ensuite, ouvre NumCam sur la calculatrice.</p>
+    <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+      <div id="qr" style="width:150px;height:150px;background:#fff;border-radius:8px;overflow:hidden"></div>
+      <div><code id="camurl" style="word-break:break-all"></code><p class="hint" id="camstate"></p></div>
+    </div>
   </section>
 
   <section class="card">
@@ -169,7 +184,7 @@ async function refresh() {
     setStatus("", "Branche ta calculatrice", "", [
       "Relie-la à cet ordinateur avec un câble USB qui transfère les données.",
       "Pour installer : elle doit afficher « Calculatrice connectée ». Sinon, appuie sur reset au dos puis rebranche.",
-      "Si c'est déjà installé : ouvre NumTube, NumChat ou NumScreen sur la calculatrice.",
+      "Si c'est déjà installé : ouvre NumTube, NumChat, NumScreen, NumCam ou NumBlocks sur la calculatrice.",
     ]);
   }
 
@@ -200,7 +215,7 @@ $("go").addEventListener("click", async () => {
     $("version").focus();
     return;
   }
-  const apps = [["numtube", "appNumtube"], ["numchat", "appNumchat"], ["numscreen", "appNumscreen"], ["numblocks", "appNumblocks"]]
+  const apps = [["numtube", "appNumtube"], ["numchat", "appNumchat"], ["numscreen", "appNumscreen"], ["numcam", "appNumcam"], ["numblocks", "appNumblocks"]]
     .filter(([, id]) => $(id).checked).map(([name]) => name);
   if (!apps.length) {
     $("result").textContent = "Choisis au moins une appli.";
@@ -216,6 +231,20 @@ $("quit").addEventListener("click", async () => {
   setStatus("warn", "NumSocial est fermé", "Tu peux fermer cet onglet.");
   clearInterval(timer);
 });
+async function camera(first) {
+  try {
+    const r = await (await fetch("/api/camera", first ? { headers: { "X-Want-Qr": "1" } } : {})).json();
+    if (first && r.qr) {
+      $("qr").innerHTML = r.qr;
+      const svg = $("qr").querySelector("svg");
+      if (svg) svg.setAttribute("width", "150"), svg.setAttribute("height", "150");
+    }
+    $("camurl").textContent = r.url;
+    $("camstate").textContent = r.connected ? "Téléphone connecté." : "Téléphone pas encore connecté.";
+  } catch {}
+}
+camera(true);
+setInterval(() => camera(false), 3000);
 const timer = setInterval(refresh, 1000);
 refresh();
 </script>

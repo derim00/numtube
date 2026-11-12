@@ -74,7 +74,7 @@ index 22d935a989..e51baf487a 100644
  
  $(call i18n_without_universal,home/i18n/base)
 diff --git a/epsilon/apps/home/apps_layout.csv b/epsilon/apps/home/apps_layout.csv
-index e0273c401b..9e8cfce8e9 100644
+index e0273c401b..bec9b5bc12 100644
 --- a/epsilon/apps/home/apps_layout.csv
 +++ b/epsilon/apps/home/apps_layout.csv
 @@ -1,5 +1,5 @@
@@ -83,11 +83,11 @@ index e0273c401b..9e8cfce8e9 100644
 -Variant2,calculation,graph,solver,regression,sequence,distributions,statistics,code,elements,inference,finance,settings
 -Variant3,calculation,graph,solver,statistics,distributions,sequence,regression,inference,finance,elements,code,settings
 -Variant4,calculation,graph,solver,statistics,regression,sequence,distributions,inference,finance,elements,code,settings
-+Default,calculation,graph,code,statistics,distributions,solver,sequence,regression,elements,inference,finance,settings,numtube,numchat,numscreen
-+Variant1,calculation,graph,solver,statistics,regression,distributions,inference,sequence,code,elements,finance,settings,numtube,numchat,numscreen
-+Variant2,calculation,graph,solver,regression,sequence,distributions,statistics,code,elements,inference,finance,settings,numtube,numchat,numscreen
-+Variant3,calculation,graph,solver,statistics,distributions,sequence,regression,inference,finance,elements,code,settings,numtube,numchat,numscreen
-+Variant4,calculation,graph,solver,statistics,regression,sequence,distributions,inference,finance,elements,code,settings,numtube,numchat,numscreen
++Default,calculation,graph,code,statistics,distributions,solver,sequence,regression,elements,inference,finance,settings,numtube,numchat,numscreen,numcam
++Variant1,calculation,graph,solver,statistics,regression,distributions,inference,sequence,code,elements,finance,settings,numtube,numchat,numscreen,numcam
++Variant2,calculation,graph,solver,regression,sequence,distributions,statistics,code,elements,inference,finance,settings,numtube,numchat,numscreen,numcam
++Variant3,calculation,graph,solver,statistics,distributions,sequence,regression,inference,finance,elements,code,settings,numtube,numchat,numscreen,numcam
++Variant4,calculation,graph,solver,statistics,regression,sequence,distributions,inference,finance,elements,code,settings,numtube,numchat,numscreen,numcam
 diff --git a/epsilon/apps/home/controller.cpp b/epsilon/apps/home/controller.cpp
 index 8dc01efaf4..a1ba087e17 100644
 --- a/epsilon/apps/home/controller.cpp
@@ -216,10 +216,10 @@ index 9b3aa8360b..bad59e45e0 100644
    bool appIsForbidden(I18n::Message appName) const;
 diff --git a/epsilon/apps/home/homebrew_apps.cpp b/epsilon/apps/home/homebrew_apps.cpp
 new file mode 100644
-index 0000000000..a7af8a1ee8
+index 0000000000..9c3dd3cc77
 --- /dev/null
 +++ b/epsilon/apps/home/homebrew_apps.cpp
-@@ -0,0 +1,28 @@
+@@ -0,0 +1,29 @@
 +#include "homebrew_apps.h"
 +
 +#include <stdint.h>
@@ -230,7 +230,7 @@ index 0000000000..a7af8a1ee8
 +
 +struct HomebrewConfig {
 +  char magic[16];
-+  uint32_t hiddenApps;  // bit 0: NumTube, bit 1: NumChat, bit 2: NumScreen
++  uint32_t hiddenApps;  // bit 0: NumTube, bit 1: NumChat, bit 2: NumScreen, bit 3: NumCam
 +};
 +
 +/* volatile: the value is patched in the image after compilation, the compiler
@@ -244,7 +244,8 @@ index 0000000000..a7af8a1ee8
 +  const uint32_t hidden = k_homebrewConfig.hiddenApps;
 +  return (appName == I18n::Message::NumtubeApp && (hidden & 1)) ||
 +         (appName == I18n::Message::NumchatApp && (hidden & 2)) ||
-+         (appName == I18n::Message::NumscreenApp && (hidden & 4));
++         (appName == I18n::Message::NumscreenApp && (hidden & 4)) ||
++         (appName == I18n::Message::NumcamApp && (hidden & 8));
 +}
 +
 +}  // namespace Home
@@ -268,7 +269,7 @@ index 0000000000..a457aede12
 +
 +}  // namespace Home
 diff --git a/epsilon/apps/module.mak b/epsilon/apps/module.mak
-index e21c795826..19be9927d4 100644
+index e21c795826..735aa7982c 100644
 --- a/epsilon/apps/module.mak
 +++ b/epsilon/apps/module.mak
 @@ -32,7 +32,7 @@ $(call depends_on_image,$(PATH_apps)/title_bar_view.cpp,$(PATH_apps)/exam_icon.p
@@ -276,10 +277,236 @@ index e21c795826..19be9927d4 100644
  # Include the specific apps
  # FIXME Use flavors instead of EPSILON_APPS?
 -EPSILON_APPS ?= calculation graph code statistics distributions inference solver sequence regression elements finance settings
-+EPSILON_APPS ?= calculation graph code statistics distributions inference solver sequence regression elements finance settings numtube numchat numscreen
++EPSILON_APPS ?= calculation graph code statistics distributions inference solver sequence regression elements finance settings numtube numchat numscreen numcam
  
  _apps_classes := $(foreach a,$(EPSILON_APPS),$(call capitalize,$a)::App)
  _apps_snapshots_declaration := $(foreach a,$(_apps_classes),$a::Snapshot m_snapshot$(subst :,,$a)Snapshot;)
+diff --git a/epsilon/apps/numcam/Makefile b/epsilon/apps/numcam/Makefile
+new file mode 100644
+index 0000000000..57e629b3b3
+--- /dev/null
++++ b/epsilon/apps/numcam/Makefile
+@@ -0,0 +1,9 @@
++# NumCam: the phone's camera on the calculator. Same client as NumScreen (apps/numscreen).
++SOURCES_apps += $(addprefix $(PATH_apps)/numcam/,$(addsuffix :-test, \
++  app.cpp \
++  numcam_icon.png \
++))
++
++$(call depends_on_image,$(PATH_apps)/numcam/app.cpp,$(PATH_apps)/numcam/numcam_icon.png)
++
++$(call i18n_with_universal,numcam/i18n/base)
+diff --git a/epsilon/apps/numcam/app.cpp b/epsilon/apps/numcam/app.cpp
+new file mode 100644
+index 0000000000..1fdf376b63
+--- /dev/null
++++ b/epsilon/apps/numcam/app.cpp
+@@ -0,0 +1,35 @@
++#include "app.h"
++
++#include <escher/container.h>
++#include <ion/events.h>
++
++#include "numcam_icon.h"
++
++namespace Numcam {
++
++const Escher::Image* App::Descriptor::icon() const {
++  return ImageStore::NumcamIcon;
++}
++
++App* App::Snapshot::unpack(Escher::Container* container) {
++  return new (container->currentAppBuffer()) App(this);
++}
++
++const App::Descriptor* App::Snapshot::descriptor() const {
++  constexpr static Descriptor s_descriptor;
++  return &s_descriptor;
++}
++
++App::App(Snapshot* snapshot)
++    : Escher::App(snapshot, &m_controller),
++      m_controller(&m_modalViewController, true),
++      m_usbTimer(&m_controller) {}
++
++void App::willBecomeInactive() {
++  // Give the USB port back, and leave the keyboard as we found it.
++  m_controller.disconnect();
++  Ion::Events::setShiftAlphaStatus(Ion::Events::ShiftAlphaStatus());
++  Escher::App::willBecomeInactive();
++}
++
++}  // namespace Numcam
+diff --git a/epsilon/apps/numcam/app.h b/epsilon/apps/numcam/app.h
+new file mode 100644
+index 0000000000..41929c5e8f
+--- /dev/null
++++ b/epsilon/apps/numcam/app.h
+@@ -0,0 +1,51 @@
++#pragma once
++
++#include <apps/i18n.h>
++#include <escher/app.h>
++
++#include <apps/numscreen/screen_controller.h>
++
++namespace Numcam {
++
++class App : public Escher::App {
++ public:
++  class Descriptor : public Escher::App::Descriptor {
++   public:
++    I18n::Message name() const override { return I18n::Message::NumcamApp; }
++    I18n::Message upperName() const override {
++      return I18n::Message::NumcamAppCapital;
++    }
++    const Escher::Image* icon() const override;
++  };
++
++  class Snapshot : public Escher::App::Snapshot {
++   public:
++    App* unpack(Escher::Container* container) override;
++    const Descriptor* descriptor() const override;
++  };
++
++  void willBecomeInactive() override;
++  int numberOfTimers() override { return 1; }
++  Escher::Timer* timerAtIndex(int i) override { return &m_usbTimer; }
++
++ private:
++  // Starts the session once the app is on screen (every tick, 100 ms).
++  class UsbTimer : public Escher::Timer {
++   public:
++    explicit UsbTimer(Numscreen::ScreenController* controller)
++        : Escher::Timer(1), m_controller(controller) {}
++
++   private:
++    bool fire() override {
++      m_controller->tick();
++      return false;
++    }
++    Numscreen::ScreenController* m_controller;
++  };
++
++  App(Snapshot* snapshot);
++  Numscreen::ScreenController m_controller;
++  UsbTimer m_usbTimer;
++};
++
++}  // namespace Numcam
+diff --git a/epsilon/apps/numcam/i18n/base.de.i18n b/epsilon/apps/numcam/i18n/base.de.i18n
+new file mode 100644
+index 0000000000..b9329e3d90
+--- /dev/null
++++ b/epsilon/apps/numcam/i18n/base.de.i18n
+@@ -0,0 +1 @@
++# NumCam has no translated strings; see base.universal.i18n.
+diff --git a/epsilon/apps/numcam/i18n/base.en.i18n b/epsilon/apps/numcam/i18n/base.en.i18n
+new file mode 100644
+index 0000000000..b9329e3d90
+--- /dev/null
++++ b/epsilon/apps/numcam/i18n/base.en.i18n
+@@ -0,0 +1 @@
++# NumCam has no translated strings; see base.universal.i18n.
+diff --git a/epsilon/apps/numcam/i18n/base.es.i18n b/epsilon/apps/numcam/i18n/base.es.i18n
+new file mode 100644
+index 0000000000..b9329e3d90
+--- /dev/null
++++ b/epsilon/apps/numcam/i18n/base.es.i18n
+@@ -0,0 +1 @@
++# NumCam has no translated strings; see base.universal.i18n.
+diff --git a/epsilon/apps/numcam/i18n/base.fr.i18n b/epsilon/apps/numcam/i18n/base.fr.i18n
+new file mode 100644
+index 0000000000..b9329e3d90
+--- /dev/null
++++ b/epsilon/apps/numcam/i18n/base.fr.i18n
+@@ -0,0 +1 @@
++# NumCam has no translated strings; see base.universal.i18n.
+diff --git a/epsilon/apps/numcam/i18n/base.it.i18n b/epsilon/apps/numcam/i18n/base.it.i18n
+new file mode 100644
+index 0000000000..b9329e3d90
+--- /dev/null
++++ b/epsilon/apps/numcam/i18n/base.it.i18n
+@@ -0,0 +1 @@
++# NumCam has no translated strings; see base.universal.i18n.
+diff --git a/epsilon/apps/numcam/i18n/base.nl.i18n b/epsilon/apps/numcam/i18n/base.nl.i18n
+new file mode 100644
+index 0000000000..b9329e3d90
+--- /dev/null
++++ b/epsilon/apps/numcam/i18n/base.nl.i18n
+@@ -0,0 +1 @@
++# NumCam has no translated strings; see base.universal.i18n.
+diff --git a/epsilon/apps/numcam/i18n/base.pt.i18n b/epsilon/apps/numcam/i18n/base.pt.i18n
+new file mode 100644
+index 0000000000..b9329e3d90
+--- /dev/null
++++ b/epsilon/apps/numcam/i18n/base.pt.i18n
+@@ -0,0 +1 @@
++# NumCam has no translated strings; see base.universal.i18n.
+diff --git a/epsilon/apps/numcam/i18n/base.universal.i18n b/epsilon/apps/numcam/i18n/base.universal.i18n
+new file mode 100644
+index 0000000000..b29a47528f
+--- /dev/null
++++ b/epsilon/apps/numcam/i18n/base.universal.i18n
+@@ -0,0 +1,2 @@
++NumcamApp = "NumCam"
++NumcamAppCapital = "NUMCAM"
+diff --git a/epsilon/apps/numcam/numcam_icon.png b/epsilon/apps/numcam/numcam_icon.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..ec4fb55526b9a51dfcf1b1f58431ea3dd2eb2c72
+GIT binary patch
+literal 2431
+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
+
+literal 0
+HcmV?d00001
+
 diff --git a/epsilon/apps/numchat/Makefile b/epsilon/apps/numchat/Makefile
 new file mode 100644
 index 0000000000..bb6ac97350
@@ -2299,7 +2526,7 @@ HcmV?d00001
 
 diff --git a/epsilon/apps/numscreen/protocol.h b/epsilon/apps/numscreen/protocol.h
 new file mode 100644
-index 0000000000..ac0369e583
+index 0000000000..ce6c86bddb
 --- /dev/null
 +++ b/epsilon/apps/numscreen/protocol.h
 @@ -0,0 +1,28 @@
@@ -2318,7 +2545,7 @@ index 0000000000..ac0369e583
 +namespace Protocol {
 +
 +enum Type : uint8_t {
-+  Start = 0x80,   // PC <- calc: start sharing the screen
++  Start = 0x80,   // PC <- calc: u8 kind (0 the computer's screen, 1 the phone's camera)
 +  Frame = 0x81,   // PC -> calc: u16 frame, u16 start tile, u8 flags, tile ops
 +  Ack = 0x82,     // PC <- calc: u16 frame, once fully drawn
 +  Key = 0x83,     // PC <- calc: u8 key (Ion::Keyboard::Key), u8 down
@@ -2333,10 +2560,10 @@ index 0000000000..ac0369e583
 +}  // namespace Numscreen
 diff --git a/epsilon/apps/numscreen/screen_controller.cpp b/epsilon/apps/numscreen/screen_controller.cpp
 new file mode 100644
-index 0000000000..ffdfe78922
+index 0000000000..c3c0186137
 --- /dev/null
 +++ b/epsilon/apps/numscreen/screen_controller.cpp
-@@ -0,0 +1,322 @@
+@@ -0,0 +1,342 @@
 +#include "screen_controller.h"
 +
 +#include <apps/apps_container.h>
@@ -2422,11 +2649,27 @@ index 0000000000..ffdfe78922
 +
 +void StartView::drawRect(KDContext* ctx, KDRect rect) const {
 +  ctx->fillRect(bounds(), k_background);
-+  drawCentered(ctx, "NumScreen", 18, k_accent, KDFont::Size::Large);
++  const bool camera = m_controller->isCamera();
++  drawCentered(ctx, camera ? "NumCam" : "NumScreen", 18, k_accent, KDFont::Size::Large);
 +  const char* message = m_controller->message();
 +  if (message[0] != '\0') {
 +    drawCentered(ctx, message, 70, k_text, KDFont::Size::Small);
 +    drawCentered(ctx, "OK : relancer", 190, k_accent, KDFont::Size::Small);
++    return;
++  }
++  if (camera) {
++    drawCentered(ctx,
++                 "La camera de ton telephone sur la calculatrice.\n"
++                 "Laisse l'appli NumSocial ouverte sur le PC.",
++                 52, k_text, KDFont::Size::Small);
++    drawCentered(ctx,
++                 "OK : photo      EXE : video\n"
++                 "shift : camera avant / arriere\n"
++                 "var : pivoter l'image\n"
++                 "Photos et videos : Images/NumCam\n"
++                 "maison : quitter",
++                 100, k_muted, KDFont::Size::Small);
++    drawCentered(ctx, "OK : ouvrir la camera", 192, k_accent, KDFont::Size::Small);
 +    return;
 +  }
 +  drawCentered(ctx,
@@ -2445,10 +2688,11 @@ index 0000000000..ffdfe78922
 +
 +// --- Controller -------------------------------------------------------------
 +
-+ScreenController::ScreenController(Escher::Responder* parentResponder)
++ScreenController::ScreenController(Escher::Responder* parentResponder, bool camera)
 +    : Escher::ViewController(parentResponder),
 +      m_view(this),
 +      m_decoder(m_rowBuffer, this),
++      m_camera(camera),
 +      m_keyState(0),
 +      m_lastScan(0),
 +      m_autoStart(true),
@@ -2523,7 +2767,7 @@ index 0000000000..ffdfe78922
 +      m_framesSeen = true;
 +      m_link.send(Protocol::Ack, payload, 2);
 +    }
-+  } else if (type == Protocol::Status) {
++  } else if (type == Protocol::Status && !m_camera) {
 +    copyString(m_status, sizeof(m_status), reinterpret_cast<const char*>(payload),
 +               length);
 +    m_stripDirty = true;
@@ -2560,13 +2804,15 @@ index 0000000000..ffdfe78922
 +}
 +
 +ScreenController::Exit ScreenController::share() {
-+  Ion::Display::pushRectUniform(
-+      KDRect(0, 0, Ion::Display::Width, k_pictureHeight), KDColorBlack);
-+  copyString(m_status, sizeof(m_status), "Connexion a l'ecran du PC...", 28);
-+  drawStrip();
++  const int height = m_camera ? Ion::Display::Height : k_pictureHeight;
++  Ion::Display::pushRectUniform(KDRect(0, 0, Ion::Display::Width, height), KDColorBlack);
++  const char* waiting = m_camera ? "Connexion a la camera..." : "Connexion a l'ecran du PC...";
++  copyString(m_status, sizeof(m_status), waiting, strlen(waiting));
++  drawStrip();   // (the camera's picture covers it as soon as it comes)
 +  m_framesSeen = false;
 +  m_keyState = m_lastScan = static_cast<uint64_t>(Ion::Keyboard::scan());
-+  m_link.send(Protocol::Start, nullptr, 0);
++  const uint8_t kind = m_camera ? 1 : 0;   // (what the gateway shows)
++  m_link.send(Protocol::Start, &kind, 1);
 +
 +  uint64_t lastFrame = Ion::Timing::millis();
 +  uint64_t lastStart = lastFrame;
@@ -2586,13 +2832,14 @@ index 0000000000..ffdfe78922
 +      lastFrame = Ion::Timing::millis();
 +      handleFrame(type, payload, length);
 +    }
-+    if (m_stripDirty) {
++    if (m_stripDirty && !m_camera) {
 +      drawStrip();
 +    }
 +    const uint64_t now = Ion::Timing::millis();
 +    if (!m_framesSeen && now - lastStart > 4000) {
 +      // The request was lost (or the gateway restarted): ask again.
-+      m_link.send(Protocol::Start, nullptr, 0);
++      const uint8_t kind = m_camera ? 1 : 0;
++      m_link.send(Protocol::Start, &kind, 1);
 +      lastStart = now;
 +    }
 +    if (now - lastFrame > k_gatewayTimeoutMs) {
@@ -2661,10 +2908,10 @@ index 0000000000..ffdfe78922
 +}  // namespace Numscreen
 diff --git a/epsilon/apps/numscreen/screen_controller.h b/epsilon/apps/numscreen/screen_controller.h
 new file mode 100644
-index 0000000000..d22e561d86
+index 0000000000..137a337756
 --- /dev/null
 +++ b/epsilon/apps/numscreen/screen_controller.h
-@@ -0,0 +1,75 @@
+@@ -0,0 +1,81 @@
 +#pragma once
 +
 +#include <apps/numtube/link.h>
@@ -2693,7 +2940,10 @@ index 0000000000..d22e561d86
 +
 +class ScreenController : public Escher::ViewController {
 + public:
-+  explicit ScreenController(Escher::Responder* parentResponder);
++  /* camera: NumCam (the phone's camera, apps/numcam), else NumScreen (the
++   * computer's screen). Same client: a picture, the keys sent. */
++  explicit ScreenController(Escher::Responder* parentResponder, bool camera = false);
++  bool isCamera() const { return m_camera; }
 +
 +  Escher::View* view() override { return &m_view; }
 +  bool handleEvent(Ion::Events::Event event) override;
@@ -2707,8 +2957,10 @@ index 0000000000..d22e561d86
 +  // TileDecoder's blitter interface.
 +  void push(int x, int y, int width, const uint16_t* pixels);
 +
-+  // The computer screen: 320x200 at the top, a status strip below.
++  // The computer screen: 320x200 at the top, a status strip below. The camera
++  // (NumCam) takes the whole screen, its notices drawn in the picture.
 +  static constexpr int k_pictureRows = 50;  // rows of 4x4 tiles
++  static constexpr int k_cameraRows = 60;
 +  static constexpr int k_pictureHeight = k_pictureRows * Numtube::k_tileSize;
 +  static constexpr int k_stripY = k_pictureHeight;
 +  static constexpr int k_stripHeight = 240 - k_pictureHeight;
@@ -2724,12 +2976,13 @@ index 0000000000..d22e561d86
 +  void handleFrame(uint8_t type, const uint8_t* payload, uint16_t length);
 +  void drawStrip();
 +
-+  using Decoder = Numtube::TileDecoder<ScreenController, k_pictureRows>;
++  using Decoder = Numtube::TileDecoder<ScreenController, k_cameraRows>;
 +
 +  StartView m_view;
 +  Numtube::Link m_link;
 +  Decoder m_decoder;
 +  uint16_t m_rowBuffer[Decoder::k_rowBufferPixels];
++  bool m_camera;
 +  uint64_t m_keyState;
 +  uint64_t m_lastScan;
 +  bool m_autoStart;

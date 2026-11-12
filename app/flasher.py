@@ -29,10 +29,10 @@ VERSION_RE = re.compile(r"^\d{1,2}\.\d{1,2}\.\d{1,2}$")
 # Mask of the homebrew apps hidden on the Home screen, found by its magic
 # (see firmware epsilon/apps/home/homebrew_apps.cpp).
 HOMEBREW_MAGIC = b"NUMAPPS-HIDDEN1\0"
-HOMEBREW_BITS = {"numtube": 1, "numchat": 2, "numscreen": 4}
+HOMEBREW_BITS = {"numtube": 1, "numchat": 2, "numscreen": 4, "numcam": 8}
 # External apps, installed with the firmware in its slot's external apps area (see nwa/build_nwa.py).
 EXTERNAL_APPS = {"numblocks": "NumBlocks"}
-NAMES = {"numtube": "NumTube", "numchat": "NumChat", "numscreen": "NumScreen", **EXTERNAL_APPS}
+NAMES = {"numtube": "NumTube", "numchat": "NumChat", "numscreen": "NumScreen", "numcam": "NumCam", **EXTERNAL_APPS}
 
 
 def _usb_backend():
@@ -212,7 +212,17 @@ def external_elements(model: str, slot: str, apps) -> list[dict]:
             data = f.read()
         elements.append({"addr": address, "data": data, "size": len(data)})
         address = (address + len(data) + 0xFFFF) & ~0xFFFF
-    if address is not None and address + 4 <= end:
+    if address is None:
+        # None chosen: the area starts with a word that is not an app, so that none installed before
+        # (NumBlocks unticked this time) stays on the Home screen.
+        for name in EXTERNAL_APPS:
+            meta_path = os.path.join(FIRMWARE_DIR, f"{name}-{model}-{slot}.json")
+            if os.path.exists(meta_path):
+                with open(meta_path) as f:
+                    meta = json.load(f)
+                return [{"addr": meta["address"], "data": b"\0\0\0\0", "size": 4}]
+        return []
+    if address + 4 <= end:
         elements.append({"addr": address, "data": b"\0\0\0\0", "size": 4})
     return elements
 

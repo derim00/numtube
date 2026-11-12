@@ -2,7 +2,7 @@
 
     python build.py
 
-Needs: pip install pyinstaller pillow numpy pyusb libusb-package imageio-ffmpeg yt-dlp certifi playwright mss paho-mqtt
+Needs: pip install pyinstaller pillow numpy pyusb libusb-package imageio-ffmpeg yt-dlp certifi playwright mss paho-mqtt cryptography segno
 Output: dist/NumSocial.app (macOS), dist/NumSocial/NumSocial.exe (Windows), dist/NumSocial (Linux),
 then zipped as dist/NumSocial-<os>.zip. It embeds firmware built from
 NumWorks code: keep it for yourself, share the repository instead.
@@ -43,6 +43,8 @@ def main() -> int:
         "--hidden-import", "numscreen_input",
         "--hidden-import", "mss",
         "--hidden-import", "numblocks_service",
+        "--hidden-import", "numcam_service",
+        "--hidden-import", "segno",
         "--hidden-import", "paho.mqtt.client",
         # NumChat drives Chrome through Playwright's driver (no browser bundled:
         # it attaches to the Chrome already installed on the computer).

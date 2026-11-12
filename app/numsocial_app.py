@@ -48,6 +48,11 @@ if len(sys.argv) > 1 and sys.argv[1] == "--self-test":
     import numchat_media, numchat_service, numchat_snap  # noqa: F401  (NumChat loads)
     import mss, numscreen_input, numscreen_service  # noqa: F401  (NumScreen loads)
     import paho.mqtt.client, numblocks_service  # noqa: F401  (NumBlocks multiplayer loads)
+    import numcam_service, segno  # noqa: F401  (NumCam loads)
+    import tempfile
+
+    os.environ.setdefault("APPDATA", tempfile.mkdtemp())
+    print("numcam:", "ok" if numcam_service.certificate("127.0.0.1") else "MISSING")
     print("numscreen:", numscreen_input.create("real").name)
     firmware = sorted(os.listdir(os.path.join(here, "firmware")))
     print("firmware:", firmware)
@@ -194,6 +199,15 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         if self.path == "/api/state":
             self._send(200, json.dumps(STATE.snapshot()).encode(), "application/json")
+        elif self.path == "/api/camera":
+            # NumCam: the address the phone opens (its secret code inside), and its QR code
+            import numcam_service
+
+            phone = numcam_service.phone(app_log)
+            info = {"url": phone.url, "connected": phone.connected}
+            if self.headers.get("X-Want-Qr"):
+                info["qr"] = phone.qr_svg()
+            self._send(200, json.dumps(info).encode(), "application/json")
         elif self.path in ("/", "/index.html"):
             with open(os.path.join(HERE, "page.html"), "rb") as handle:
                 self._send(200, handle.read(), "text/html; charset=utf-8")
@@ -212,7 +226,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(409, b"", "text/plain")
                 return
             version = str(body.get("version", "")).strip()
-            apps = [str(a) for a in body.get("apps") or ["numtube", "numchat", "numscreen", "numblocks"]]
+            apps = [str(a) for a in body.get("apps") or ["numtube", "numchat", "numscreen", "numcam", "numblocks"]]
             threading.Thread(target=run_install, args=(version, apps), daemon=True).start()
             self._send(202, b"{}", "application/json")
         elif self.path == "/api/quit":

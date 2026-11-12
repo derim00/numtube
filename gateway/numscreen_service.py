@@ -16,6 +16,7 @@ Frames (keep in sync with apps/numscreen/protocol.h):
 """
 from __future__ import annotations
 
+import io
 import struct
 import sys
 import threading
@@ -30,6 +31,7 @@ T_FIRST, T_LAST = 0x80, 0x8F
 
 PICTURE_W, PICTURE_H = 320, 200
 ROWS = PICTURE_H // 4
+CAMERA_ROWS = 60   # NumCam: the whole screen, 320x240
 FPS = 15
 END_OF_FRAME = 1
 
@@ -245,6 +247,123 @@ class KeyMapper:
                 self.out.move(dx * speed * dt, dy * speed * dt)
 
 
+class CameraKeys:
+    """NumCam's keys: OK a photo, EXE a video (start, stop), shift the other camera, var turns the
+    picture. The phone does what is asked (numcam_service.py)."""
+
+    def __init__(self, phone, status_changed) -> None:
+        self.phone, self.status_changed = phone, status_changed
+        self.mode = "camera"
+        self.recording = 0.0      # when the video started (0: not filming)
+        self.notice, self.notice_until = "", 0.0
+        self.shown_second = -1
+        self.connected_at = 0.0
+        self.was_connected = False
+        self.lock = threading.Lock()
+        phone.on_saved = self._saved
+
+    def _saved(self, kind: str, path: str) -> None:
+        self.say(("Photo" if kind == "photo" else "Video") + " enregistree : Images/NumCam")
+
+    def say(self, text: str, seconds: float = 3) -> None:
+        self.notice, self.notice_until = text, time.monotonic() + seconds
+        self.status_changed()
+
+    def status_line(self) -> str:
+        if not self.phone.connected:
+            return "Sur le telephone, ouvre :"
+        if self.recording:
+            s = int(time.monotonic() - self.recording)
+            return f"REC {s // 60:02d}:{s % 60:02d}    EXE : arreter"
+        return "OK : photo   EXE : video   shift : camera"
+
+    def overlay(self, picture: np.ndarray) -> np.ndarray:
+        """The camera takes the whole screen: what there is to say is drawn in the picture, on a dark
+        band at the bottom (the address to open, until the phone is there; the video's time; a photo
+        taken...), or not at all."""
+        from PIL import Image, ImageDraw, ImageFont
+
+        if not self.phone.connected:
+            lines = ["NumCam", "Sur le telephone, ouvre :", self.phone.url.replace("https://", ""),
+                     "(QR code sur la page de NumSocial)"]
+        else:
+            lines = []
+            if self.recording:
+                s = int(time.monotonic() - self.recording)
+                lines.append(f"REC {s // 60:02d}:{s % 60:02d}")
+            if self.notice and time.monotonic() < self.notice_until:
+                lines.append(self.notice)
+            elif time.monotonic() - self.connected_at < 5:
+                lines.append("OK photo  EXE video  shift camera  var pivoter")
+        if not lines:
+            return picture
+        image = Image.fromarray(picture)
+        draw = ImageDraw.Draw(image, "RGBA")
+        try:
+            font = ImageFont.load_default(size=13)
+        except TypeError:
+            font = ImageFont.load_default()
+        h = 16 * len(lines) + 6
+        top = image.height - h if self.phone.connected else (image.height - h) // 2
+        draw.rectangle([0, top, image.width, top + h], fill=(0, 0, 0, 150))
+        for i, line in enumerate(lines):
+            w = draw.textlength(line, font=font)
+            color = (255, 80, 70) if line.startswith("REC") else (255, 255, 255)
+            draw.text(((image.width - w) / 2, top + 3 + 16 * i), line, font=font, fill=color)
+        return np.asarray(image)
+
+    def second_line(self) -> str:
+        if not self.phone.connected:
+            return self.phone.url.replace("https://", "")
+        if self.notice and time.monotonic() < self.notice_until:
+            return self.notice
+        return "var : pivoter   maison : quitter"
+
+    def press(self, key: int) -> None:
+        with self.lock:
+            if not self.phone.connected:
+                return
+            if key == OK:
+                self.phone.command(do="photo")
+                self.say("Photo...")
+            elif key == EXE:
+                if self.recording:
+                    self.phone.command(do="rec_stop")
+                    self.recording = 0.0
+                    self.say("Envoi de la video...", 10)
+                else:
+                    self.phone.command(do="rec_start")
+                    self.recording = time.monotonic()
+                    self.status_changed()
+            elif key == SHIFT:
+                if self.recording:
+                    self.phone.command(do="rec_stop")
+                    self.recording = 0.0
+                self.phone.flip()
+                self.say("Camera " + ("avant" if self.phone.facing == "user" else "arriere"))
+            elif key == VAR:
+                self.phone.turn()
+                self.say(f"Image pivotee de {self.phone.rotate} degres")
+
+    def release(self, key: int) -> None:
+        pass
+
+    def release_all(self) -> None:
+        if self.recording:
+            self.phone.command(do="rec_stop")
+            self.recording = 0.0
+
+    def tick(self, dt: float) -> None:
+        # (the status follows the phone coming and going, the video's seconds, notices ending)
+        if self.phone.connected and not self.was_connected:
+            self.connected_at = time.monotonic()   # (the keys shown a few seconds)
+        self.was_connected = self.phone.connected
+        second = int(time.monotonic())
+        if second != self.shown_second:
+            self.shown_second = second
+            self.status_changed()
+
+
 # ---------------------------------------------------------------------------
 # Screen capture
 # ---------------------------------------------------------------------------
@@ -352,6 +471,22 @@ class ThreadedCapture(Capture):
         self.stopped.set()
 
 
+class PhoneCapture(Capture):
+    """NumCam: the latest picture the phone sent (black until it is there)."""
+
+    def __init__(self, phone) -> None:
+        self.phone = phone
+
+    def grab(self):
+        from PIL import Image
+
+        frame = self.phone.frame if self.phone.connected else None
+        if not frame:
+            return np.zeros((PICTURE_H, PICTURE_W, 3), dtype=np.uint8), (0, 0)
+        image = Image.open(io.BytesIO(frame)).convert("RGB")
+        return np.asarray(image), (0, 0)
+
+
 class PatternCapture(Capture):
     """Moving test picture (tests, demo): no real screen involved."""
 
@@ -371,18 +506,22 @@ class PatternCapture(Capture):
         return rgb, (1440, 900)
 
 
-def fit_picture(rgb: np.ndarray) -> tuple[np.ndarray, tuple[int, int, int, int]]:
-    """Scales the screen into 320x200, keeping its shape (black bars).
-    Returns the picture and the box (x, y, w, h) it fills."""
+def fit_picture(rgb: np.ndarray, height: int = PICTURE_H, cover: bool = False
+                ) -> tuple[np.ndarray, tuple[int, int, int, int]]:
+    """Scales the screen into 320 x height: all of it with black bars, or (cover) filling it all, the
+    edges cut. Returns the picture and the box (x, y, w, h) the source takes in it."""
     from PIL import Image
 
     h, w = rgb.shape[:2]
-    scale = min(PICTURE_W / w, PICTURE_H / h)
+    scale = (max if cover else min)(PICTURE_W / w, height / h)
     nw, nh = max(1, round(w * scale)), max(1, round(h * scale))
-    image = Image.fromarray(np.ascontiguousarray(rgb)).resize((nw, nh), Image.BOX)
-    out = np.zeros((PICTURE_H, PICTURE_W, 3), dtype=np.uint8)
-    x0, y0 = (PICTURE_W - nw) // 2, (PICTURE_H - nh) // 2
-    out[y0:y0 + nh, x0:x0 + nw] = np.asarray(image)
+    image = np.asarray(Image.fromarray(np.ascontiguousarray(rgb)).resize((nw, nh), Image.BOX))
+    out = np.zeros((height, PICTURE_W, 3), dtype=np.uint8)
+    x0, y0 = (PICTURE_W - nw) // 2, (height - nh) // 2
+    sx, sy = max(0, -x0), max(0, -y0)
+    dx, dy = max(0, x0), max(0, y0)
+    cw, ch = min(nw - sx, PICTURE_W - dx), min(nh - sy, height - dy)
+    out[dy:dy + ch, dx:dx + cw] = image[sy:sy + ch, sx:sx + cw]
     return out, (x0, y0, nw, nh)
 
 
@@ -391,7 +530,8 @@ class Streamer(threading.Thread):
     calculator."""
 
     def __init__(self, link, encoder, capture: Capture, out: numscreen_input.Input,
-                 mapper: KeyMapper, status, log, refresh=None) -> None:
+                 mapper: KeyMapper, status, log, refresh=None, height: int = PICTURE_H, cover: bool = False,
+                 overlay=None) -> None:
         super().__init__(daemon=True)
         self.link = link
         self.encoder = encoder
@@ -401,6 +541,7 @@ class Streamer(threading.Thread):
         self.status = status
         self.log = log
         self.refresh = refresh
+        self.height, self.cover, self.overlay = height, cover, overlay   # (NumCam: 240, filled, notices drawn in)
         self.stopped = threading.Event()
         self.lock = threading.Lock()
         self.pending: dict[int, tuple[float, int]] = {}
@@ -465,13 +606,24 @@ class Streamer(threading.Thread):
         except Exception as error:
             self.log(f"capture d'ecran impossible: {error}")
             self.status(None, "Capture d'ecran impossible sur ce PC")
-        black = np.zeros((PICTURE_H, PICTURE_W, 3), dtype=np.uint8)
+        black = np.zeros((self.height, PICTURE_W, 3), dtype=np.uint8)
         last_tick = time.monotonic()
         next_frame = 0.0
         next_refresh = time.monotonic() + 3
+        next_stats, sent_before = time.monotonic() + 5, 0
+        phone = getattr(self.mapper, "phone", None)
+        phone_before = phone.frames_in if phone else 0
         try:
             while not self.stopped.is_set():
                 now = time.monotonic()
+                if phone is not None and now > next_stats:
+                    # (NumCam: who is slow, the phone or the calculator)
+                    got = max(phone.frames_in - phone_before, 1)
+                    self.log(f"numcam: telephone {(phone.frames_in - phone_before) / 5:.1f} img/s "
+                             f"(compression {phone.enc_ms // got} ms, aller-retour {phone.rtt_ms // got} ms), "
+                             f"calculatrice {(self.frames_sent - sent_before) / 5:.1f} img/s")
+                    phone.enc_ms = phone.rtt_ms = 0
+                    next_stats, sent_before, phone_before = now + 5, self.frames_sent, phone.frames_in
                 if self.refresh is not None and now > next_refresh:
                     next_refresh = now + 3
                     self.refresh()
@@ -485,11 +637,14 @@ class Streamer(threading.Thread):
                 if capture is not None:
                     try:
                         rgb, screen = capture.grab()
-                        picture, box = fit_picture(rgb)
-                        self._draw_cursor(picture, box, screen)
+                        picture, box = fit_picture(rgb, self.height, self.cover)
+                        if screen[0]:   # (the computer's screen: its cursor; the camera has none)
+                            self._draw_cursor(picture, box, screen)
                     except Exception as error:
                         self.log(f"capture: {error}")
                         picture = black
+                if self.overlay is not None:
+                    picture = self.overlay(picture.copy())
                 self._send(picture)
         except OSError:
             pass  # calculator gone
@@ -522,7 +677,8 @@ class ScreenService:
             self.notice = notice
         if self.link is None or self.mapper is None:
             return
-        second = self.notice or HELP[self.mapper.mode]
+        second = (self.mapper.second_line() if hasattr(self.mapper, "second_line")
+                  else self.notice or HELP[self.mapper.mode])
         text = self.mapper.status_line() + "\n" + second
         if text == self.last_status:
             return
@@ -558,7 +714,7 @@ class ScreenService:
     # -- frames from the calculator
     def handle(self, link, frame_type: int, payload: bytes) -> None:
         if frame_type == T_START:
-            self.start(link)
+            self.start(link, camera=bool(payload and payload[0] == 1))
         elif frame_type == T_KEY and len(payload) >= 2 and self.mapper is not None:
             key, down = payload[0], payload[1]
             if down:
@@ -571,12 +727,25 @@ class ScreenService:
             self.log("partage d'ecran arrete")
             self.stop()
 
-    def start(self, link) -> None:
+    def start(self, link, camera: bool = False) -> None:
         self.stop()
         self.link = link
+        self.last_status = None
+        if camera:
+            import numcam_service
+
+            phone = numcam_service.phone(self.log)
+            self.log("numcam demarre")
+            self.mapper = CameraKeys(phone, lambda: self._status())
+            self.notice = ""
+            self._status()
+            self.streamer = Streamer(link, self.encoder_factory(CAMERA_ROWS), lambda: PhoneCapture(phone), self.out,
+                                     self.mapper, self._status, self.log, height=CAMERA_ROWS * 4, cover=True,
+                                     overlay=self.mapper.overlay)
+            self.streamer.start()
+            return
         self.log("partage d'ecran demarre")
         self.mapper = KeyMapper(self.out, lambda: self._status())
-        self.last_status = None
         notice = ""
         if self.kind == "real":
             notice = self._permission_notice()

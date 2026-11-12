@@ -25,7 +25,7 @@ Une page s'ouvre dans ton navigateur. Laisse NumSocial ouvert.
 - Branche la calculatrice. Elle affiche « Calculatrice connectée »
   (sinon : reset au dos avec un trombone, puis rebranche).
 - Sur la page : vérifie la version officielle (lue automatiquement), coche
-  les applis voulues (NumTube, NumChat, NumScreen, NumBlocks), clique « Installer ».
+  les applis voulues (NumTube, NumChat, NumScreen, NumCam, NumBlocks), clique « Installer ».
 - Environ 1 minute. La calculatrice redémarre avec un écran
   « UNOFFICIAL SOFTWARE » : c'est normal. Les applis sont en bas de l'accueil.
 
@@ -97,6 +97,23 @@ Une page s'ouvre dans ton navigateur. Laisse NumSocial ouvert.
 - En partie : les autres joueurs, leurs blocs et le chat (touche x) sont
   partagés. Pause > Disconnect pour partir.
 - Seul l'Overworld est partagé ; chacun a ses propres monstres.
+
+7. NumCam (la caméra du téléphone)
+- Le téléphone doit être sur le même Wi-Fi que l'ordinateur. Sur la page de
+  NumSocial, l'encadré NumCam montre un QR code : scanne-le avec le téléphone
+  (ou tape l'adresse affichée), puis « Ouvrir la caméra » et autorise-la.
+- La première fois, le téléphone dit que la connexion n'est pas privée : le
+  certificat est fait par NumSocial. iPhone : « Afficher les détails » >
+  « Visiter ce site ». Android : « Paramètres avancés » > « Continuer ».
+- Sous Windows, accepte que le pare-feu laisse passer NumSocial (réseau privé).
+- Ouvre NumCam sur la calculatrice : l'image du téléphone s'affiche.
+    OK        photo          EXE   démarre / arrête une vidéo
+    shift     caméra avant / arrière
+    var       pivote l'image (selon comment le téléphone est fixé)
+    maison    quitter
+- Photos et vidéos sont prises par le téléphone en pleine résolution et
+  enregistrées sur l'ordinateur, dans Images/NumCam. Laisse la page ouverte et
+  l'écran du téléphone allumé.
 
 Avertissement Snapchat
 - Piloter Snapchat Web automatiquement est contraire aux conditions

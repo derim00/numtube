@@ -962,7 +962,7 @@ def screen_service(opts: argparse.Namespace):
 
             kind = getattr(opts, "numscreen", "real")
             _SCREEN_SERVICE = screen.ScreenService(
-                lambda: TileEncoder(screen.ROWS), clean_text, truncate_utf8, log, kind)
+                lambda rows=None: TileEncoder(rows or screen.ROWS), clean_text, truncate_utf8, log, kind)
         return _SCREEN_SERVICE
 
 
