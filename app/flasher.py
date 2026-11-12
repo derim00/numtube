@@ -80,19 +80,47 @@ class InstallError(Exception):
     pass
 
 
+_known: dict = {}   # the calculator last read: its USB address -> (model, slot)
+
+
+def _release(device) -> None:
+    """Closes our handle on the device. Windows lets one program at a time open a USB device: a
+    handle left open makes it busy for everyone (the installer itself, NumWorks' website)."""
+    try:
+        usb.util.dispose_resources(device)
+    except Exception:
+        pass
+
+
 def find_calculator():
-    """Returns (device, info) for a calculator in DFU mode, or (None, None)."""
+    """Returns (device, info) for a calculator in DFU mode, or (None, None).
+
+    Listing devices does not open them; reading the model and slot does, so that is done once per
+    calculator plugged in, and the device is released right after."""
     devices = _find(idVendor=NUMWORKS_VID, idProduct=DFU_PID, find_all=True)
     devices = list(devices or [])
     if not devices:
+        _known.clear()
         return None, None
     device = devices[0]
+    key = (getattr(device, "bus", None), getattr(device, "address", None), device.bcdDevice)
+    if key in _known:
+        return device, dict(_known[key])
     try:
         model = dfu.get_model(device)
         active = dfu.get_active_slot(device)
-    except Exception as error:  # permission problems surface here on Linux
+    except Exception as error:  # permission problems surface here on Linux; on Windows, a busy device
         return device, {"error": str(error)}
+    finally:
+        _release(device)
+    _known.clear()
+    _known[key] = {"model": model, "active_slot": active}
     return device, {"model": model, "active_slot": active}
+
+
+def forget_calculator() -> None:
+    """(after an install: the calculator restarts, read it again when it comes back)"""
+    _known.clear()
 
 
 def _inactive_slot(active: str) -> str:
@@ -228,3 +256,8 @@ def install(version: str, log, progress, apps=("numtube", "numchat", "numscreen"
         dfu.exit_dfu(leave_address)
     finally:
         os.unlink(image)
+        try:
+            _release(dfu.__dict__["__dev"])
+        except Exception:
+            pass
+        forget_calculator()
