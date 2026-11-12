@@ -80,6 +80,7 @@ class State:
         self.version_probe_done = False
         self.installing = False
         self.progress = 0
+        self.phase = ""
         self.install_result = ""
         self.gateway_connected = False
 
@@ -96,6 +97,7 @@ class State:
                 "detectedVersion": self.detected_version,
                 "installing": self.installing,
                 "progress": self.progress,
+                "phase": self.phase,
                 "installResult": self.install_result,
                 "gatewayConnected": self.gateway_connected,
                 "logs": self.logs[-120:],
@@ -143,7 +145,10 @@ def run_install(version: str, apps: list[str]) -> None:
     with STATE.lock:
         STATE.installing, STATE.progress, STATE.install_result = True, 0, ""
     try:
-        flasher.install(version, app_log, lambda p: setattr(STATE, "progress", p), apps)
+        def progress(percent: int, phase: str = "") -> None:
+            STATE.progress, STATE.phase = percent, phase
+
+        flasher.install(version, app_log, progress, apps)
         result = "ok"
         app_log("Installation terminée. Ouvre l'appli sur la calculatrice.")
     except Exception as error:

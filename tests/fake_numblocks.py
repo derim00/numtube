@@ -6,7 +6,8 @@ Alice opens her world, Bob finds it in the list and joins: the world, the
 changed blocks, the players, positions, blocks both ways, chat, then Alice
 closes the game and Bob is told.
 
-Usage: ../.venv/bin/python3 fake_numblocks.py
+Usage: ../.venv/bin/python3 fake_numblocks.py          (through the public broker)
+       ../.venv/bin/python3 fake_numblocks.py --lan    (no Internet: the local network only)
 """
 import os
 import struct
@@ -38,7 +39,13 @@ def find(frames, kind):
 
 
 def main() -> int:
+    lan = "--lan" in sys.argv
     env = dict(os.environ, NUMBLOCKS_TOPICS=f"numsocial/test/{uuid.uuid4().hex[:8]}")
+    if not lan:
+        env["NUMBLOCKS_NO_LAN"] = "1"
+    if lan:
+        env["NUMBLOCKS_OFFLINE"] = "1"
+        env["NUMBLOCKS_LAN_PORT"] = str(47000 + os.getpid() % 900)   # (never a real game nearby)
     alice, bob = FakeCalculator(), FakeCalculator()
     ga, gb = gateway(alice, env), gateway(bob, env)
     ok = False
@@ -65,7 +72,7 @@ def main() -> int:
         bob.wait_for(nb.T_LIST_DONE, 15, frames)
         servers = [nb.read_str8(p, 1)[0] for p in find(frames, nb.T_SERVER)]
         assert gid in servers, f"partie absente de la liste: {servers}"
-        print("dans la liste publique :", len(servers), "partie(s)")
+        print("dans la liste" + (" (reseau local)" if lan else " publique"), ":", len(servers), "partie(s)")
 
         bob.send(nb.T_JOIN, nb.str8(gid))
         frames = []
@@ -120,7 +127,7 @@ def main() -> int:
         out_b, _ = gb.communicate(timeout=5)
         if not ok:
             print("--- passerelle Alice\n" + out_a[-2000:] + "\n--- passerelle Bob\n" + out_b[-2000:])
-    print("OK : multijoueur NumBlocks entre deux passerelles")
+    print("OK : multijoueur NumBlocks entre deux passerelles" + (", sans Internet" if lan else ""))
     return 0
 
 

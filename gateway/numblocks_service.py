@@ -5,7 +5,9 @@ through the NumSocial link. The player who opens their world ("Open to LAN")
 makes their own computer the server of the game: it keeps the blocks changed
 and the players, welcomes those who join and passes everything around.
 Computers find each other through a public MQTT broker (no account, no
-router setting): the list of open games is a set of retained messages.
+router setting): the list of open games is a set of retained messages. Games
+are also announced on the local network (UDP broadcast) and played there over
+TCP, straight between the computers: on the same Wi-Fi, no Internet needed.
 
 Calculator <-> computer frames (little endian; str8 = length byte + UTF-8):
   0x90 HELLO      c->p  u8 protocol, str8 name
@@ -53,6 +55,8 @@ ENTRY = struct.Struct("<iBiH")
 STATE = struct.Struct("<fffffBH")
 ENTRIES_PER_FRAME = 300          # 3.3 KB, under the 4 KB frame limit
 BROKERS = [("broker.emqx.io", 1883), ("broker.hivemq.com", 1883), ("test.mosquitto.org", 1883)]
+if os.environ.get("NUMBLOCKS_OFFLINE"):   # (tests: as if the computer had no Internet)
+    BROKERS = []
 # Tests set their own prefix so that they never show in the real list.
 PREFIX = os.environ.get("NUMBLOCKS_TOPICS", "numsocial/numblocks/1")
 LOBBY_FRESH = 40                 # s: older lobby entries are games that died
@@ -165,6 +169,245 @@ def _matches(pattern: str, topic: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# The local network: the host's computer is a small hub, found by broadcast
+# ---------------------------------------------------------------------------
+LAN_PORT = int(os.environ.get("NUMBLOCKS_LAN_PORT", "47654"))   # UDP, the announcements
+LAN_GROUP = "239.255.77.42"   # multicast: every gateway hears it, even several on one computer
+LAN_FRESH = 6                                                   # s
+
+
+def _lan_frame(topic: str, payload: bytes) -> bytes:
+    t = topic.encode()
+    return struct.pack("<HI", len(t), len(payload)) + t + payload
+
+
+def _lan_read(sock, buf: bytearray):
+    """Frames from a TCP stream: yields (topic, payload); returns when the peer is gone."""
+    while True:
+        while len(buf) >= 6:
+            tl, pl = struct.unpack_from("<HI", buf)
+            if len(buf) < 6 + tl + pl:
+                break
+            topic = bytes(buf[6:6 + tl]).decode("utf-8", "replace")
+            payload = bytes(buf[6 + tl:6 + tl + pl])
+            del buf[:6 + tl + pl]
+            yield topic, payload
+        try:
+            data = sock.recv(65536)
+        except OSError:
+            return
+        if not data:
+            return
+        buf += data
+
+
+class LanHub:
+    """The host's side: the players on the local network connect here over TCP; what the server
+    publishes goes to all of them, what they publish comes to the server. The game is announced
+    by UDP broadcast every 2 seconds."""
+
+    def __init__(self, log) -> None:
+        import socket
+
+        self.log = log
+        self.handlers: dict[str, callable] = {}
+        self.clients: list = []
+        self.lock = threading.Lock()
+        self.announce: bytes | None = None
+        self.stopped = threading.Event()
+        self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.server.bind(("0.0.0.0", 0))
+        self.server.listen(8)
+        self.port = self.server.getsockname()[1]
+        threading.Thread(target=self._accept, daemon=True).start()
+        threading.Thread(target=self._beacon, daemon=True).start()
+
+    def _accept(self) -> None:
+        while not self.stopped.is_set():
+            try:
+                sock, addr = self.server.accept()
+            except OSError:
+                return
+            with self.lock:
+                self.clients.append(sock)
+            threading.Thread(target=self._client, args=(sock,), daemon=True).start()
+
+    def _client(self, sock) -> None:
+        for topic, payload in _lan_read(sock, bytearray()):
+            for pattern, handler in list(self.handlers.items()):
+                if _matches(pattern, topic):
+                    try:
+                        handler(topic, payload, False)
+                    except Exception as error:
+                        self.log(f"numblocks: message LAN ignore ({error})")
+        with self.lock:
+            if sock in self.clients:
+                self.clients.remove(sock)
+
+    def _beacon(self) -> None:
+        import socket
+
+        udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        udp.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        udp.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 1)
+        udp.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_LOOP, 1)
+        first = True
+        while not self.stopped.wait(0.2 if first else 2):
+            first = False
+            if self.announce:
+                for address in (LAN_GROUP, "255.255.255.255"):
+                    try:
+                        udp.sendto(self.announce, (address, LAN_PORT))
+                    except OSError:
+                        pass
+        udp.close()
+
+    def publish(self, topic: str, payload: bytes, retain: bool = False) -> None:
+        if "/lobby/" in topic:
+            if payload:
+                info = json.loads(payload)
+                info["gid"], info["port"] = topic.rsplit("/", 1)[-1], self.port
+                self.announce = json.dumps(info).encode()
+            else:
+                self.announce = None
+            return
+        frame = _lan_frame(topic, payload)
+        with self.lock:
+            for sock in list(self.clients):
+                try:
+                    sock.sendall(frame)
+                except OSError:
+                    self.clients.remove(sock)
+
+    def subscribe(self, topic: str, handler) -> None:
+        self.handlers[topic] = handler
+
+    def unsubscribe(self, topic: str) -> None:
+        self.handlers.pop(topic, None)
+
+    def close(self) -> None:
+        self.stopped.set()
+        try:
+            self.server.close()
+        except OSError:
+            pass
+        with self.lock:
+            for sock in self.clients:
+                try:
+                    sock.close()
+                except OSError:
+                    pass
+            self.clients.clear()
+
+
+class LanClient:
+    """A player's side, connected to a host's hub on the local network: the same publish/subscribe
+    as the broker."""
+
+    def __init__(self, log, address: str, port: int) -> None:
+        import socket
+
+        self.log = log
+        self.handlers: dict[str, callable] = {}
+        self.sock = socket.create_connection((address, port), timeout=5)
+        self.sock.settimeout(None)
+        self.lock = threading.Lock()
+        threading.Thread(target=self._read, daemon=True).start()
+
+    def _read(self) -> None:
+        for topic, payload in _lan_read(self.sock, bytearray()):
+            for pattern, handler in list(self.handlers.items()):
+                if _matches(pattern, topic):
+                    try:
+                        handler(topic, payload, False)
+                    except Exception as error:
+                        self.log(f"numblocks: message LAN ignore ({error})")
+
+    def publish(self, topic: str, payload: bytes, retain: bool = False) -> None:
+        with self.lock:
+            try:
+                self.sock.sendall(_lan_frame(topic, payload))
+            except OSError:
+                pass
+
+    def subscribe(self, topic: str, handler) -> None:
+        self.handlers[topic] = handler
+
+    def unsubscribe(self, topic: str) -> None:
+        self.handlers.pop(topic, None)
+
+    def close(self) -> None:
+        try:
+            self.sock.close()
+        except OSError:
+            pass
+
+
+class Both:
+    """The host publishes to the public broker (when it is there) and to the local network."""
+
+    def __init__(self, broker: Broker, hub: LanHub) -> None:
+        self.broker, self.hub = broker, hub
+
+    def publish(self, topic: str, payload: bytes, retain: bool = False) -> None:
+        if self.broker.connected.is_set():
+            self.broker.publish(topic, payload, retain)
+        self.hub.publish(topic, payload, retain)
+
+    def subscribe(self, topic: str, handler) -> None:
+        self.broker.subscribe(topic, handler)
+        self.hub.subscribe(topic, handler)
+
+    def unsubscribe(self, topic: str) -> None:
+        self.broker.unsubscribe(topic)
+        self.hub.unsubscribe(topic)
+
+
+class LanListener:
+    """Hears the games announced on the local network."""
+
+    def __init__(self, log) -> None:
+        import socket
+
+        self.log = log
+        self.games: dict[str, tuple[dict, str, float]] = {}   # gid -> (info, address, when)
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if hasattr(socket, "SO_REUSEPORT"):
+            try:
+                self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+            except OSError:
+                pass
+        try:
+            self.sock.bind(("", LAN_PORT))
+            membership = socket.inet_aton(LAN_GROUP) + socket.inet_aton("0.0.0.0")
+            self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, membership)
+        except OSError as error:
+            log(f"numblocks: parties LAN invisibles ({error})")
+            return
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def _run(self) -> None:
+        while True:
+            try:
+                data, (address, _) = self.sock.recvfrom(4096)
+                info = json.loads(data)
+            except (OSError, ValueError):
+                continue
+            if info.get("v") == PROTOCOL and info.get("gid") and info.get("port"):
+                # (the same game heard on 127.0.0.1 and the network: the network's address wins)
+                old = self.games.get(info["gid"])
+                if old and old[1] != address and address.startswith("127.") and time.time() - old[2] < LAN_FRESH:
+                    continue
+                self.games[info["gid"]] = (info, address, time.time())
+
+    def fresh(self) -> dict[str, tuple[dict, str]]:
+        now = time.time()
+        return {gid: (info, address) for gid, (info, address, when) in self.games.items() if now - when < LAN_FRESH}
+
+
+# ---------------------------------------------------------------------------
 # The game server, on the host's computer
 # ---------------------------------------------------------------------------
 class Member:
@@ -177,7 +420,8 @@ class Member:
 class Server:
     def __init__(self, service, link, name: str, world: dict) -> None:
         self.service, self.link, self.log = service, link, service.log
-        self.broker = service.broker
+        self.hub = LanHub(service.log)
+        self.broker = Both(service.broker, self.hub)   # (both: the public list, and the local network)
         self.gid = "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
         self.world = world            # seed, type, mode, time, name
         self.blocks: dict[tuple[int, int, int], int] = {}
@@ -214,8 +458,12 @@ class Server:
 
     def _loop(self) -> None:
         last_announce = 0.0
+        online = self.service.broker.connected.is_set()
         while not self.stopped.wait(0.15):
             now = time.monotonic()
+            if self.service.broker.connected.is_set() and not online:
+                last_announce = 0.0   # (the broker reached at last: in the public list now)
+            online = self.service.broker.connected.is_set()
             with self.lock:
                 for pid in [p for p, m in self.members.items() if m.cid and now - m.seen > 15]:
                     self._remove(pid, "a perdu la connexion")
@@ -322,6 +570,8 @@ class Server:
         self.broker.publish(f"{self.topic}/s", bytes([T_END, 255, END_HOST_LEFT]) + "L'hote a ferme la partie".encode())
         self._announce(closing=True)
         self.broker.unsubscribe(f"{self.topic}/u")
+        time.sleep(0.2)   # (the last message out before the local players are cut off)
+        self.hub.close()
         self.log("numblocks: partie fermee")
 
 
@@ -329,9 +579,9 @@ class Server:
 # A player who joined someone else's game
 # ---------------------------------------------------------------------------
 class Guest:
-    def __init__(self, service, link, gid: str, name: str) -> None:
+    def __init__(self, service, link, gid: str, name: str, net=None) -> None:
         self.service, self.link, self.log = service, link, service.log
-        self.broker = service.broker
+        self.broker = net or service.broker   # (the public broker, or a LanClient)
         self.gid, self.name = gid, name
         self.cid = "".join(random.choices(string.ascii_lowercase + string.digits, k=10))
         self.topic = f"{PREFIX}/g/{gid}"
@@ -404,6 +654,8 @@ class Guest:
         self.stopped.set()
         self.broker.unsubscribe(f"{self.topic}/s")
         self.broker.unsubscribe(f"{self.topic}/c/{self.cid}")
+        if isinstance(self.broker, LanClient):
+            self.broker.close()
 
 
 # ---------------------------------------------------------------------------
@@ -454,6 +706,11 @@ class NumBlocksService:
     def __init__(self, log) -> None:
         self.log = log
         self.broker = Broker(log)
+        self.lan = LanListener(log)
+        if os.environ.get("NUMBLOCKS_NO_LAN"):   # (tests: only the public broker)
+            self.lan.fresh = lambda: {}
+        # (the public broker is reached in the background: the calculator never waits for it)
+        threading.Thread(target=self.broker.ensure, daemon=True).start()
         self.outbox: Outbox | None = None
         self.link = None
         self.name = "Joueur"
@@ -470,8 +727,10 @@ class NumBlocksService:
             self.log(f"numblocks: recu 0x{kind:02x} ({len(payload)} octets)")
         if kind == T_HELLO:
             self.name = clean_name(read_str8(payload, 1)[0])
-            online = self.broker.ensure()
-            link.send(T_HELLO_OK, bytes([1 if online else 0]))
+            # Always playable: the local network needs no Internet; the public list comes when reached.
+            link.send(T_HELLO_OK, b"\x01")
+            if not self.broker.connected.is_set():
+                threading.Thread(target=self.broker.ensure, daemon=True).start()
         elif kind == T_LIST:
             threading.Thread(target=self._list, args=(link,), daemon=True).start()
         elif kind == T_HOST and len(payload) >= 15:
@@ -487,12 +746,20 @@ class NumBlocksService:
                 self._open_game(link)
         elif kind == T_JOIN:
             self._stop_game()
-            if not self.broker.ensure():
+            gid = read_str8(payload, 0)[0]
+            net = None
+            lan = self.lan.fresh().get(gid)
+            if lan:
+                try:
+                    net = LanClient(self.log, lan[1], int(lan[0]["port"]))
+                except OSError as error:
+                    self.log(f"numblocks: partie LAN injoignable ({error})")
+            if net is None and not self.broker.ensure():
                 link.send(T_END, bytes([END_NETWORK]) + "Pas d'Internet sur l'ordinateur".encode())
                 return
-            self.game = Guest(self, link, read_str8(payload, 0)[0], self.name)
+            self.game = Guest(self, link, gid, self.name, net)
             self.game.start()
-            self.log(f"numblocks: {self.name} rejoint la partie {self.game.gid}")
+            self.log(f"numblocks: {self.name} rejoint la partie {gid}" + (" (LAN)" if net else ""))
         elif kind == T_LEAVE:
             self._stop_game()
         elif self.game is not None:
@@ -500,9 +767,10 @@ class NumBlocksService:
 
     def _open_game(self, link) -> None:
         world, self.hosting = self.hosting, None
-        if not self.broker.ensure():
-            link.send(T_HOST_OK, str8("") + "Pas d'Internet sur l'ordinateur".encode())
-            return
+        # (without Internet the game is on the local network only, and in the public list as soon as the
+        # broker is reached: it is announced again every 10 s)
+        if not self.broker.connected.is_set():
+            threading.Thread(target=self.broker.ensure, daemon=True).start()
         server = Server(self, link, self.name, world)
         for x, y, z, b in self.dump:
             server.blocks[(x, y, z)] = b
@@ -513,9 +781,6 @@ class NumBlocksService:
         self.log(f"numblocks: partie {server.gid} ouverte ({world['name']}, {len(server.blocks)} blocs modifies)")
 
     def _list(self, link) -> None:
-        if not self.broker.ensure():
-            link.send(T_LIST_DONE, bytes([0]))
-            return
         found: dict[str, dict] = {}
 
         def entry(topic: str, payload: bytes, retained: bool) -> None:
@@ -531,9 +796,17 @@ class NumBlocksService:
                 found[gid] = info
 
         topic = f"{PREFIX}/lobby/+"
-        self.broker.subscribe(topic, entry)
-        time.sleep(1.5)   # retained entries arrive at once
-        self.broker.unsubscribe(topic)
+        self.broker.connected.wait(6)   # (just started: the broker is being reached)
+        if self.broker.connected.is_set():
+            self.broker.subscribe(topic, entry)
+            time.sleep(1.5)   # retained entries arrive at once
+            self.broker.unsubscribe(topic)
+        else:
+            time.sleep(1.5)   # (the local network's announcements, every 2 s)
+        for gid, (info, address) in self.lan.fresh().items():
+            info = dict(info)
+            info["world"] = f"{str(info.get('world', '?'))[:18]} [LAN]"
+            found[gid] = info
         mine = self.game.gid if isinstance(self.game, Server) else None
         games = [(gid, info) for gid, info in found.items() if gid != mine]
         games.sort(key=lambda g: -g[1].get("t", 0))

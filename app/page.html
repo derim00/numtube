@@ -116,6 +116,7 @@
     </div>
     <button id="go">Installer sur la calculatrice</button>
     <div class="bar" id="bar" hidden><div id="fill"></div></div>
+    <div class="hint" id="phase"></div>
     <div class="result" id="result"></div>
   </section>
 
@@ -180,6 +181,7 @@ async function refresh() {
   $("go").disabled = s.installing || s.calculator !== "dfu";
   $("bar").hidden = !s.installing && s.progress === 0;
   $("fill").style.width = s.progress + "%";
+  $("phase").textContent = s.installing && s.phase ? `${s.phase}… ${s.progress} %` : "";
   const r = $("result");
   r.textContent = s.installResult === "ok" ? "C'est installé ! Ouvre l'appli sur la calculatrice (en bas de l'écran d'accueil)." : s.installResult;
   r.className = "result " + (s.installResult === "ok" ? "ok" : s.installResult ? "err" : "");

@@ -217,6 +217,43 @@ def external_elements(model: str, slot: str, apps) -> list[dict]:
     return elements
 
 
+def _erase_then_write(elements: list[dict], log, progress) -> None:
+    """Erases every page the elements cover, then writes them: two steps the page shows (the bar goes
+    0-30 % erasing, 30-100 % writing). progress(percent, step)."""
+    layout = dfu.get_memory_layout(dfu.__dict__["__dev"])
+    pages: list[int] = []
+    for elem in elements:
+        addr, end = elem["addr"], elem["addr"] + elem["size"]
+        while addr < end:
+            segment = next((s for s in layout if s["addr"] <= addr <= s["last_addr"]), None)
+            if segment is None:
+                raise InstallError(f"Adresse 0x{addr:08x} hors de la mémoire de la calculatrice.")
+            page = addr & ~(segment["page_size"] - 1)
+            if not pages or pages[-1] != page:
+                pages.append(page)
+            addr = page + segment["page_size"]
+    pages = sorted(set(pages))
+    log(f"Effacement ({len(pages)} pages de 64 Ko)...")
+    for i, page in enumerate(pages):
+        progress(i * 30 // len(pages), "Effacement")
+        dfu.page_erase(page)
+    total = sum(e["size"] for e in elements) or 1
+    log(f"Écriture ({total // 1024} Ko)...")
+    done = [0]
+    last = [-1]
+
+    def report(base, offset, size):
+        percent = 30 + (done[0] + offset) * 70 // total
+        if percent != last[0]:
+            last[0] = percent
+            progress(min(percent, 99), "Écriture")
+
+    for elem in elements:
+        dfu.write_memory(elem["addr"], elem["data"], report, elem["addr"], elem["size"])
+        done[0] += elem["size"]
+    progress(100, "Terminé")
+
+
 def install(version: str, log, progress, apps=("numtube", "numchat", "numscreen")) -> None:
     """Flashes the chosen apps into the inactive slot and starts them."""
     device, info = find_calculator()
@@ -241,17 +278,7 @@ def install(version: str, log, progress, apps=("numtube", "numchat", "numscreen"
         elements += external_elements(model, slot, apps)
         leave_address = elements[0]["addr"]
         dfu.init()
-        log("Écriture du firmware (environ 1 minute)...")
-        last = [-1]
-
-        def report(_base, offset, size):
-            percent = int(offset * 100 / size) if size else 100
-            if percent != last[0]:
-                last[0] = percent
-                progress(percent)
-
-        dfu.write_elements(elements, False, progress=report)
-        progress(100)
+        _erase_then_write(elements, log, progress)
         log("Redémarrage de la calculatrice...")
         dfu.exit_dfu(leave_address)
     finally:

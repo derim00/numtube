@@ -2915,10 +2915,10 @@ index 0000000000..3a9e24f861
 +NumtubeAppCapital = "NUMTUBE"
 diff --git a/epsilon/apps/numtube/link.cpp b/epsilon/apps/numtube/link.cpp
 new file mode 100644
-index 0000000000..c04b3a3447
+index 0000000000..731d9d9c13
 --- /dev/null
 +++ b/epsilon/apps/numtube/link.cpp
-@@ -0,0 +1,273 @@
+@@ -0,0 +1,297 @@
 +#include "link.h"
 +
 +#include <ion/timing.h>
@@ -3135,10 +3135,10 @@ index 0000000000..c04b3a3447
 +}  // namespace Numtube
 +
 +/* NumSocial link for external apps (.nwa), such as the multiplayer NumBlocks.
-+ * Published in the userland's vector table (see ion userland boot/isr.cpp),
-+ * after the "NSOC" magic word, so that an app can check the firmware has
-+ * them before calling. The userland has no RAM to spare: the app lends the
-+ * memory of the link (numsocial_link_storage_size() bytes, 8-aligned). */
++ * Published in a table of its own, found by its signature (the userland's
++ * vector table must stay as NumWorks made it: the kernel reads it). The
++ * userland has no RAM to spare: the app lends the memory of the link
++ * (numsocial_link_storage_size() bytes, 8-aligned). */
 +namespace {
 +Numtube::Link* s_appLink = nullptr;
 +}  // namespace
@@ -3190,6 +3190,30 @@ index 0000000000..c04b3a3447
 +}
 +
 +int numsocial_link_plugged() { return Numtube::cablePlugged() ? 1 : 0; }
++
++/* What apps look for: "NUMSOCIAL-LINK1\0", a version, then the functions
++ * (see nwa/numsocial_link.h; keep the order). 16-aligned, in the userland's
++ * flash, before the external apps. */
++struct NumsocialLinkTable {
++  char magic[16];
++  uint32_t version;
++  uint32_t count;
++  const void* functions[7];
++};
++/* (its section is kept by the userland linker script: nothing in the firmware reads it; extern: a const of its own otherwise) */
++extern const NumsocialLinkTable numsocial_link_table;
++__attribute__((used, aligned(16), section(".rodata.numsocial_link"))) const NumsocialLinkTable
++    numsocial_link_table = {
++    "NUMSOCIAL-LINK1",
++    1,
++    7,
++    {reinterpret_cast<const void*>(numsocial_link_storage_size),
++     reinterpret_cast<const void*>(numsocial_link_open),
++     reinterpret_cast<const void*>(numsocial_link_send),
++     reinterpret_cast<const void*>(numsocial_link_poll),
++     reinterpret_cast<const void*>(numsocial_link_close),
++     reinterpret_cast<const void*>(numsocial_link_plugged),
++     nullptr}};
 +
 +}  // extern "C"
 diff --git a/epsilon/apps/numtube/link.h b/epsilon/apps/numtube/link.h
@@ -6351,41 +6375,6 @@ index 0000000000..175b36e298
 +}  // namespace USB
 +}  // namespace Device
 +}  // namespace Ion
-diff --git a/shared/ion/src/device/userland/boot/isr.cpp b/shared/ion/src/device/userland/boot/isr.cpp
-index 646d2564b5..95bb287547 100644
---- a/shared/ion/src/device/userland/boot/isr.cpp
-+++ b/shared/ion/src/device/userland/boot/isr.cpp
-@@ -5,10 +5,29 @@
- extern "C" {
- extern const void* _process_stack_start;
- typedef void (*ISR)(void);
-+/* NumSocial link for external apps, defined in apps/numtube/link.cpp. */
-+unsigned int numsocial_link_storage_size();
-+int numsocial_link_open(void* storage, unsigned int size);
-+int numsocial_link_send(unsigned char type, const unsigned char* payload,
-+                        unsigned short length);
-+int numsocial_link_poll(unsigned char* type, unsigned char* buffer,
-+                        unsigned short capacity);
-+void numsocial_link_close();
-+int numsocial_link_plugged();
- }
- 
- ISR InitialisationVector[]
-     __attribute__((section(".isr_vector_table"), used)) = {
-         reinterpret_cast<ISR>(&_process_stack_start),  // Stack start
-         start,                                         // Reset service routine,
--        reinterpret_cast<ISR>(Ion::Display::drawString)};
-+        reinterpret_cast<ISR>(Ion::Display::drawString),
-+        /* External apps reach these through their trampoline table, which
-+         * starts at drawString: index 1 is the "NSOC" magic word, then the
-+         * NumSocial link (keep the order, apps rely on it). */
-+        reinterpret_cast<ISR>(0x434F534E),  // "NSOC"
-+        reinterpret_cast<ISR>(numsocial_link_storage_size),
-+        reinterpret_cast<ISR>(numsocial_link_open),
-+        reinterpret_cast<ISR>(numsocial_link_send),
-+        reinterpret_cast<ISR>(numsocial_link_poll),
-+        reinterpret_cast<ISR>(numsocial_link_close),
-+        reinterpret_cast<ISR>(numsocial_link_plugged)};
 diff --git a/shared/ion/src/device/userland/drivers/termia_usb.cpp b/shared/ion/src/device/userland/drivers/termia_usb.cpp
 new file mode 100644
 index 0000000000..723fefbb25
@@ -6963,6 +6952,20 @@ index 0000000000..723fefbb25
 +}  // namespace Termia
 +}  // namespace USB
 +}  // namespace Ion
+diff --git a/shared/ion/src/device/userland/flash/userland_shared.ld b/shared/ion/src/device/userland/flash/userland_shared.ld
+index d50a68fa18..3f40f47585 100644
+--- a/shared/ion/src/device/userland/flash/userland_shared.ld
++++ b/shared/ion/src/device/userland/flash/userland_shared.ld
+@@ -24,6 +24,9 @@ SECTIONS {
+   } >FLASH_USERLAND
+ 
+   .rodata : {
++    . = ALIGN(16);
++    /* NumSocial's link for external apps: found by its signature, used by nothing here */
++    KEEP(*(.rodata.numsocial_link))
+     . = ALIGN(4);
+     *(.rodata)
+     *(.rodata.*)
 diff --git a/shared/ion/src/shared/dummy/usb.cpp b/shared/ion/src/shared/dummy/usb.cpp
 index 4f67f18bc8..dbbcd6226e 100644
 --- a/shared/ion/src/shared/dummy/usb.cpp
