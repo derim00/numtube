@@ -36,6 +36,15 @@ if len(sys.argv) > 1 and sys.argv[1] == "--self-test":
     print("ffmpeg:", subprocess.run([ffmpeg, "-version"], capture_output=True,
                                     text=True).stdout.splitlines()[0])
     print("yt-dlp:", yt_dlp.version.__version__)
+    import yt_dlp_ejs  # noqa: F401  (YouTube's challenge solver scripts)
+
+    here_ = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    sys.path.insert(0, os.path.join(here_, "..", "gateway"))
+    import numtube_gateway
+
+    deno = numtube_gateway.deno_path()
+    print("deno:", subprocess.run([deno, "--version"], capture_output=True, text=True).stdout.split("\n")[0]
+          if deno else "MISSING")
     backend = libusb_package.get_libusb1_backend()
     print("libusb:", "ok" if backend else "MISSING")
     list(usb.core.find(find_all=True, backend=backend))

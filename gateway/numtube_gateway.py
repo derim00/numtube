@@ -49,6 +49,28 @@ def _ytdlp_command() -> list[str]:
         return ["yt-dlp"]
 
 
+def deno_path() -> str | None:
+    """The JavaScript runtime yt-dlp needs for YouTube's challenges (without it, YouTube only gives
+    throttled videos: a minute or more to start, or nothing): the one NumSocial ships (PyPI's deno),
+    else one installed on the computer."""
+    import shutil
+
+    name = "deno.exe" if sys.platform == "win32" else "deno"
+    if FROZEN:
+        bundled = os.path.join(getattr(sys, "_MEIPASS", ""), "deno", name)
+        if os.path.exists(bundled):
+            return bundled
+    try:
+        import deno
+
+        path = deno.find_deno_bin()
+        if path and os.path.exists(path):
+            return str(path)
+    except Exception:
+        pass
+    return shutil.which("deno")
+
+
 def _ffmpeg_path() -> str:
     try:
         import imageio_ffmpeg
@@ -59,6 +81,9 @@ def _ffmpeg_path() -> str:
 
 
 YTDLP = _ytdlp_command()
+_DENO = deno_path()
+if _DENO:
+    YTDLP = [*YTDLP, "--js-runtimes", f"deno:{_DENO}"]
 FFMPEG = _ffmpeg_path()
 
 
@@ -816,7 +841,28 @@ class Player(threading.Thread):
 
     def _run(self) -> None:
         self.link.send(T_STATUS, "Connexion a YouTube...".encode())
-        self.info = resolve_video(self.video_id, self.opts.lang)
+        # (YouTube can take its time: the calculator says so rather than look stuck)
+        result: dict = {}
+
+        def resolve() -> None:
+            try:
+                result["info"] = resolve_video(self.video_id, self.opts.lang)
+            except Exception as error:
+                result["error"] = error
+
+        worker = threading.Thread(target=resolve, daemon=True)
+        worker.start()
+        started = time.monotonic()
+        while worker.is_alive() and not self.stop_event.is_set():
+            worker.join(1)
+            waited = int(time.monotonic() - started)
+            if worker.is_alive() and waited >= 8 and waited % 4 == 0:
+                self.link.send(T_STATUS, f"YouTube est lent... ({waited} s)".encode())
+        if self.stop_event.is_set():
+            return
+        if "error" in result:
+            raise result["error"]
+        self.info = result["info"]
         info = self.info
         subs_state = f"sous-titres {info.sub_lang}" if info.cues else "AUCUN sous-titre"
         log(f"lecture: {info.title} ({format_duration(info.duration_ms / 1000)}, {subs_state})")

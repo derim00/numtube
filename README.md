@@ -1,9 +1,5 @@
 # NumTube : YouTube sur NumWorks
 
-> [!WARNING]
-> **NumTube est partiellement en panne.** La recherche marche, mais le lancement
-> des vidéos peut prendre plus d'une minute, voire échouer. On règle ça bientôt.
-
 NumTube met YouTube sur une calculatrice NumWorks reliée en USB à un ordinateur
 (Mac ou Windows). La calculatrice cherche et affiche les vidéos ; l'ordinateur
 fait passerelle : il interroge YouTube avec yt-dlp, décode la vidéo avec ffmpeg

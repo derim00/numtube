@@ -68,7 +68,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install Python packages
-        run: python -m pip install pyinstaller pillow numpy pyusb libusb-package imageio-ffmpeg yt-dlp certifi playwright mss paho-mqtt cryptography segno
+        run: python -m pip install pyinstaller pillow numpy pyusb libusb-package imageio-ffmpeg yt-dlp certifi playwright mss paho-mqtt cryptography segno yt-dlp-ejs deno
       - name: Build the app
         run: python app/build.py
       - name: Self-test (Windows)

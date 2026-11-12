@@ -2,7 +2,7 @@
 
     python build.py
 
-Needs: pip install pyinstaller pillow numpy pyusb libusb-package imageio-ffmpeg yt-dlp certifi playwright mss paho-mqtt cryptography segno
+Needs: pip install pyinstaller pillow numpy pyusb libusb-package imageio-ffmpeg yt-dlp certifi playwright mss paho-mqtt cryptography segno yt-dlp-ejs deno
 Output: dist/NumSocial.app (macOS), dist/NumSocial/NumSocial.exe (Windows), dist/NumSocial (Linux),
 then zipped as dist/NumSocial-<os>.zip. It embeds firmware built from
 NumWorks code: keep it for yourself, share the repository instead.
@@ -54,6 +54,11 @@ def main() -> int:
         "--collect-all", "imageio_ffmpeg",
         "--collect-data", "certifi",
     ]
+    # YouTube's challenges: yt-dlp's solver scripts, and the JavaScript runtime that runs them (deno, from
+    # PyPI). Without them YouTube only gives throttled videos (a minute or more to start, or nothing).
+    import deno
+
+    args += ["--collect-all", "yt_dlp_ejs", "--add-binary", f"{deno.find_deno_bin()}{SEP}deno"]
     system = platform.system()
     # A folder rather than a single exe: the gateway runs yt-dlp as a copy of
     # the app, and a one-file build would unpack 100 MB on every call.
