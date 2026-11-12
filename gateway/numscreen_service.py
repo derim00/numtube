@@ -549,11 +549,13 @@ class Streamer(threading.Thread):
         self.rate = 250_000.0  # bytes/s, measured from the acks
         self.sprite = _cursor_sprite()
         self.frames_sent = 0
+        self.last_ack = time.monotonic()
 
     def stop(self) -> None:
         self.stopped.set()
 
     def on_ack(self, frame_id: int) -> None:
+        self.last_ack = time.monotonic()
         with self.lock:
             if frame_id not in self.pending:
                 return
@@ -631,6 +633,15 @@ class Streamer(threading.Thread):
                 last_tick = now
                 if now < next_frame or self._in_flight() >= 2:
                     time.sleep(0.01)
+                    continue
+                silent = now - self.last_ack
+                if silent > 15:
+                    # The calculator left without a word (Home, a cable pulled): sending on would keep
+                    # its USB link busy receiving, and the next app could not get a word through.
+                    self.log("partage arrete : la calculatrice ne repond plus")
+                    return
+                if silent > 3 and now < next_frame + 2:
+                    time.sleep(0.05)   # (no answer: one picture every 2 s, to see whether it is still there)
                     continue
                 next_frame = now + 1.0 / FPS
                 picture = black
